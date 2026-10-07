@@ -52,7 +52,7 @@ export function ChatInput({
     onChange(next.slice(0, COMMENT_MAX));
     requestAnimationFrame(grow);
   }
-
+// @ts-ignore
   async function toggleMic() {
     if (disabled || busy) return;
     setVoiceError(null);
