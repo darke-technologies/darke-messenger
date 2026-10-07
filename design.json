@@ -1,0 +1,114 @@
+{
+  "theme": "dark",
+  "colors": {
+    "background": {
+      "app": "#121212",
+      "sidebar": "#161616",
+      "card": "#1c1c1e",
+      "input": "#1f1f22",
+      "modal": "#1d1d1f",
+      "overlay": "rgba(0, 0, 0, 0.75)"
+    },
+    "border": {
+      "subtle": "#2a2a2d",
+      "focused": "#3b82f6",
+      "divider": "#222225"
+    },
+    "text": {
+      "primary": "#ffffff",
+      "secondary": "#a1a1aa",
+      "muted": "#71717a",
+      "codeHighlight": "#d97706",
+      "codeBg": "#27272a"
+    },
+    "interactive": {
+      "primaryButtonBg": "#ffffff",
+      "primaryButtonText": "#000000",
+      "secondaryButtonBg": "#27272a",
+      "secondaryButtonText": "#ffffff",
+      "accentIcon": "#3b82f6",
+      "hover": "rgba(255, 255, 255, 0.05)"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "mono": "JetBrains Mono, Fira Code, monospace"
+    },
+    "scale": {
+      "headingHero": {
+        "fontSize": "24px",
+        "fontWeight": 700,
+        "lineHeight": "32px",
+        "letterSpacing": "-0.02em"
+      },
+      "headingModal": {
+        "fontSize": "18px",
+        "fontWeight": 600,
+        "lineHeight": "24px"
+      },
+      "sectionLabel": {
+        "fontSize": "11px",
+        "fontWeight": 600,
+        "textTransform": "uppercase",
+        "letterSpacing": "0.05em"
+      },
+      "body": {
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": "20px"
+      },
+      "caption": {
+        "fontSize": "12px",
+        "fontWeight": 400,
+        "lineHeight": "16px"
+      }
+    }
+  },
+  "layout": {
+    "sidebar": {
+      "width": "260px",
+      "padding": "16px 12px",
+      "itemHeight": "36px",
+      "itemPadding": "8px 12px",
+      "borderRadius": "8px"
+    },
+    "chatContainer": {
+      "maxWidth": "768px",
+      "padding": "24px 16px",
+      "gap": "16px"
+    },
+    "inputBar": {
+      "borderRadius": "16px",
+      "padding": "12px 16px",
+      "minHeight": "52px"
+    },
+    "modal": {
+      "width": "440px",
+      "borderRadius": "16px",
+      "padding": "24px",
+      "gap": "20px"
+    }
+  },
+  "components": {
+    "buttons": {
+      "rules": [
+        "NEVER set width to 100% on toolbar or page header actions.",
+        "Use rounded-full (9999px) for pill buttons or rounded-lg (8px) for compact actions.",
+        "Primary CTAs use dark-on-light contrast (white background with black text).",
+        "Action labels MUST be plain text without literal brackets."
+      ]
+    },
+    "cards": {
+      "borderRadius": "12px",
+      "border": "1px solid #2a2a2d",
+      "background": "#1c1c1e"
+    },
+    "inputs": {
+      "borderRadius": "10px",
+      "border": "1px solid #2a2a2d",
+      "padding": "10px 14px",
+      "focusRing": "0 0 0 2px #3b82f6"
+    }
+  }
+}

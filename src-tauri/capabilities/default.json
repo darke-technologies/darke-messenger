@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window and newsfeed popout",
+  "windows": ["main", "beeper", "newsfeed"],
+  "webviews": ["main", "beeper", "newsfeed"],
+  "remote": {
+    "urls": ["https://*.supabase.co", "wss://*.supabase.co"]
+  },
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:webview:default",
+    "core:window:default",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-show",
+    "core:webview:allow-create-webview-window"
+  ]
+}

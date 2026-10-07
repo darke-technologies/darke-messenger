@@ -1,0 +1,2 @@
+-- DARKE v1 Phase 3 — Channels / hello room (removed)
+-- Chat schema was dropped in phase23.sql. Do not recreate public.messages.

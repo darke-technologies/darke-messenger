@@ -1,0 +1,2 @@
+-- DARKE v1 Phase 12 — chat_presence (removed)
+-- Chat schema was dropped in phase23.sql. Do not recreate this table.

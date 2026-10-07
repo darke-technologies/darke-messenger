@@ -1,0 +1,8 @@
+node_modules
+.next
+dist
+out
+.env*.local
+
+src-tauri/target/
+src-tauri/target-focus/

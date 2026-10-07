@@ -1,0 +1,40 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /app/
+
+# Google & Gemini Crawlers
+User-agent: Googlebot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+# OpenAI Crawlers
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+
+# Anthropic & Claude Crawlers
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-User
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+
+# Perplexity Crawlers
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://darke.ai/sitemap.xml

@@ -1,0 +1,2 @@
+-- DARKE v1 Phase 14 — channel rename (removed)
+-- Chat schema was dropped in phase23.sql.

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-theme="hud">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/darkefavicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DARKE — The Anti-Chrome browser for app builders.</title>
+    <style>
+      html, body, #root { margin: 0; height: 100%; background: #000; color: #fff; }
+    </style>
+    <meta
+      name="description"
+      content="The Anti-Chrome browser for app builders."
+    />
+  </head>
+  <body>
+    <div id="root">Opening DARKE…</div>
+    <script>
+      (function () {
+        var root = document.getElementById("root");
+        if (root) root.textContent = "Opening DARKE…";
+        window.addEventListener("error", function (e) {
+          if (root) root.textContent = String((e && e.message) || e);
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          if (root) root.textContent = String((e && e.reason) || e);
+        });
+        window.setTimeout(function () {
+          if (
+            root &&
+            !root.querySelector(".app-frame") &&
+            !sessionStorage.getItem("darke-ui-retry")
+          ) {
+            sessionStorage.setItem("darke-ui-retry", "1");
+            location.reload();
+          }
+        }, 2000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

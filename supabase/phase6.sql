@@ -1,0 +1,2 @@
+-- DARKE v1 Phase 6 — chat_rooms / chat_messages (removed)
+-- Chat schema was dropped in phase23.sql. Do not recreate these tables.
