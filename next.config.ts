@@ -6,8 +6,9 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   reactStrictMode: false,
-  // Locked `.next/trace` on Windows (EPERM) kills `next dev` and leaves :3000 blank.
-  distDir: ".next-dev",
+  // `next build` / Vercel must emit `.next`. Local `next dev` uses `.next-dev`
+  // so a locked `.next/trace` on Windows cannot blank :3000.
+  distDir: process.env.NODE_ENV === "production" ? ".next" : ".next-dev",
   outputFileTracingRoot: projectRoot,
   transpilePackages: [
     "@wppconnect/libsignal-protocol",
