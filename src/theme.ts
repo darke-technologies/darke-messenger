@@ -41,6 +41,35 @@ function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
     .join("")}`;
 }
 
+function relativeLuminance(r: number, g: number, b: number): number {
+  const lin = [r, g, b].map((c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+function scaleToLuminance(
+  r: number,
+  g: number,
+  b: number,
+  target: number,
+): { r: number; g: number; b: number } {
+  let t = 1;
+  let next = { r, g, b };
+  for (let i = 0; i < 28; i += 1) {
+    const L = relativeLuminance(next.r, next.g, next.b);
+    if (Math.abs(L - target) < 0.012) break;
+    t *= L > target ? 0.9 : 1.08;
+    next = {
+      r: Math.max(0, Math.min(255, Math.round(r * t))),
+      g: Math.max(0, Math.min(255, Math.round(g * t))),
+      b: Math.max(0, Math.min(255, Math.round(b * t))),
+    };
+  }
+  return next;
+}
+
 export function themeOption(id: ThemeId) {
   return THEME_OPTIONS.find((opt) => opt.id === id) ?? THEME_OPTIONS[0];
 }
@@ -75,6 +104,10 @@ export function applyAccentVars(id: ThemeId, root: HTMLElement = document.docume
       b: Math.round(b * 0.1),
     }),
   );
+  const bubbleFrom = scaleToLuminance(r, g, b, 0.22);
+  const bubbleTo = scaleToLuminance(r, g, b, 0.11);
+  root.style.setProperty("--hud-bubble-from", toHex(bubbleFrom));
+  root.style.setProperty("--hud-bubble-to", toHex(bubbleTo));
 }
 
 export function readStoredTheme(): ThemeId {

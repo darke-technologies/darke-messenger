@@ -23900,6 +23900,19 @@ h3.chat-settings-label {
   display: block;
   padding: 8px 12px 6px;
   border-radius: 18px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #f4f4f5;
+}
+
+.dm-pane.is-direct .dm-bubble p {
+  display: inline;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: inherit;
 }
 
 .dm-pane.is-direct .dm-bubble.is-received {
@@ -23908,27 +23921,18 @@ h3.chat-settings-label {
   border-bottom-left-radius: 6px;
 }
 
-.dm-pane.is-direct .dm-bubble.is-sent,
-.dm-pane.is-direct .dm-bubble.is-sent p {
-  font-weight: 400;
-}
-
 .dm-pane.is-direct .dm-bubble.is-sent {
-  background: var(--hud);
-  color: #111113;
+  background: linear-gradient(
+    165deg,
+    var(--hud-bubble-from, #8a4a28) 0%,
+    var(--hud-bubble-to, #5c2e18) 100%
+  );
+  color: #f4f4f5;
+  font-weight: 400;
   border-bottom-right-radius: 6px;
 }
 
-html[data-accent="gray"] .dm-pane.is-direct .dm-bubble.is-sent {
-  background: linear-gradient(165deg, #1f1f23 0%, #4a4a50 52%, #9a9aa0 100%);
-  color: #f4f4f5;
-}
-
-.dm-pane.is-direct .dm-bubble.is-sent p {
-  display: inline;
-}
-
-.dm-pane.is-direct .dm-bubble.is-sent .dm-bubble-time {
+.dm-pane.is-direct .dm-bubble-time {
   display: inline;
   margin-left: 8px;
   vertical-align: baseline;
@@ -23936,7 +23940,7 @@ html[data-accent="gray"] .dm-pane.is-direct .dm-bubble.is-sent {
   font-size: 11px;
   font-weight: 400;
   line-height: inherit;
-  opacity: 0.7;
+  opacity: 0.72;
 }
 
 .dm-bubble-time {
@@ -23947,17 +23951,9 @@ html[data-accent="gray"] .dm-pane.is-direct .dm-bubble.is-sent {
   white-space: nowrap;
 }
 
-.dm-pane.is-direct .dm-bubble.is-received {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
 .dm-pane.is-direct .dm-bubble.is-received .dm-bubble-time {
   color: #a1a1aa;
   opacity: 1;
-  align-self: flex-end;
 }
 
 .dm-pane.is-direct .dm-bubble-row > .newsfeed-reply-btn {

@@ -148,7 +148,7 @@ export function ChatMessage({
         <div className={`dm-bubble${mine ? " is-sent" : " is-received"}`}>
           <p>
             {body}
-            {mine && !isGroup ? (
+            {!isGroup ? (
               <time
                 className="dm-bubble-time"
                 dateTime={new Date(msg.at).toISOString()}
@@ -157,14 +157,6 @@ export function ChatMessage({
               </time>
             ) : null}
           </p>
-          {!mine && !isGroup ? (
-            <time
-              className="dm-bubble-time"
-              dateTime={new Date(msg.at).toISOString()}
-            >
-              {formatBubbleTime(msg.at)}
-            </time>
-          ) : null}
         </div>
         {mine && status ? <span className="dm-bubble-status">{status}</span> : null}
         {isGroup ? replyBtn : null}
