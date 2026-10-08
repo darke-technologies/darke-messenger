@@ -1,6 +1,6 @@
 import { readLocalText, writeLocalText } from "./localStore";
 
-export const JOIN_ORIGIN = "https://darke.ai";
+export const JOIN_ORIGIN = "https://darke-messenger-q2d1.vercel.app";
 export const JOIN_KEY_STORAGE = "darke.join.session";
 export const CHAT_FOCUS_EVENT = "darke-chat-focus";
 export const CHAT_SETTINGS_EVENT = "darke-open-chat-settings";
@@ -27,7 +27,7 @@ export function openConversationSettings(chatId: string): void {
 
 export type PeerConnectionState = "CONNECTED" | "WAITING FOR PEER";
 
-export type DmRelayState = "mailbox" | "purged";
+export type DmRelayState = "mailbox" | "purged" | "pending-keys";
 
 export type DmMessage = {
   id: string;

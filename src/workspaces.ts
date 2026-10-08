@@ -432,7 +432,7 @@ export function faviconForWebsite(raw: string): string | null {
 }
 
 export function workspaceInviteUrl(token: string): string {
-  return `https://darke.ai/?ws=${encodeURIComponent(token)}`;
+  return `https://darke-messenger-q2d1.vercel.app/?ws=${encodeURIComponent(token)}`;
 }
 
 export function nextWorkspaceName(existing: DarkeWorkspace[]): string {

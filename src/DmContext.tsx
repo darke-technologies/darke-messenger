@@ -61,6 +61,7 @@ import {
   isChatOwner,
   listChatGuests,
   normalizeChatGuestHandle,
+  sidebarPeerHandle,
 } from "./chatService";
 import {
   ensureFounderSidebarNode,
@@ -661,7 +662,7 @@ export function DmProvider({
         fileName: file?.name,
         fileUrl,
         fileSize: file?.size,
-        relay: opts?.mailbox ? "mailbox" : undefined,
+        relay: opts?.mailbox ? "pending-keys" : undefined,
         replyToMessageId: quoted?.id,
         replyToSnippet: snippet || undefined,
       };
@@ -674,32 +675,39 @@ export function DmProvider({
       );
       if (!opts?.mailbox || guest) return;
       const recipient =
+        (thread ? sidebarPeerHandle(thread, slug) : null) ||
         thread?.peerUsername ||
         peerUsernameFromHandle(thread?.handle ?? "");
-      const pendingId =
-        recipient && thread
-          ? file
-            ? await queueMailboxFile({
-                sender: slug,
-                recipient,
-                sessionKey: thread.sessionKey,
-                file,
-              }).catch(() => null)
-            : await queueMailboxMessage({
-                sender: slug,
-                recipient,
-                sessionKey: thread.sessionKey,
-                body: text,
-              }).catch(() => null)
-          : null;
-      if (!pendingId) {
+      if (!recipient || !thread) return;
+      const queued = file
+        ? await queueMailboxFile({
+            sender: slug,
+            recipient,
+            sessionKey: thread.sessionKey,
+            file,
+          }).catch((): { ok: false; reason: "error" } => ({
+            ok: false,
+            reason: "error",
+          }))
+        : await queueMailboxMessage({
+            sender: slug,
+            recipient,
+            sessionKey: thread.sessionKey,
+            body: text,
+          }).catch((): { ok: false; reason: "error" } => ({
+            ok: false,
+            reason: "error",
+          }));
+      if (!queued.ok) {
         setThreads((rows) =>
           rows.map((row) =>
             row.id === activeId
               ? {
                   ...row,
                   messages: row.messages.map((msg) =>
-                    msg.id === localId ? { ...msg, relay: undefined } : msg,
+                    msg.id === localId
+                      ? { ...msg, relay: "pending-keys" as const }
+                      : msg,
                   ),
                 }
               : row,
@@ -713,7 +721,9 @@ export function DmProvider({
             ? {
                 ...row,
                 messages: row.messages.map((msg) =>
-                  msg.id === localId ? { ...msg, pendingId } : msg,
+                  msg.id === localId
+                    ? { ...msg, pendingId: queued.id, relay: "mailbox" as const }
+                    : msg,
                 ),
               }
             : row,
@@ -772,30 +782,45 @@ export function DmProvider({
           fileUrl: item.fileUrl,
           fileSize: item.fileSize,
         };
-        const existing = next.find((row) => row.sessionKey === key);
+        const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
+        const existing =
+          next.find((row) => row.sessionKey === key) ??
+          next.find(
+            (row) =>
+              !threadIsGroup(row) && sidebarPeerHandle(row, slug) === sender,
+          );
         if (existing) {
           if (existing.messages.some((msg) => msg.pendingId === item.id)) {
             continue;
           }
+          const activeHere = existing.id === activeId;
           next = next.map((row) =>
-            row.sessionKey === key
-              ? { ...row, messages: [...row.messages, message] }
+            row.id === existing.id
+              ? {
+                  ...row,
+                  peerUsername: row.peerUsername || sender,
+                  handle: row.peerUsername ? row.handle : sender,
+                  messages: [...row.messages, message],
+                  unread: activeHere ? 0 : (row.unread ?? 0) + 1,
+                }
               : row,
           );
         } else {
+          const collision = next.some(
+            (row) => row.id === key || row.sessionKey === key,
+          );
+          const threadKey = collision ? generateSessionKey() : key;
           next = [
             {
               ...newThread(
-                key,
-                true,
+                threadKey,
+                false,
                 "direct",
-                item.sender,
+                sender,
                 nextChatSeq(slug, next),
               ),
-              messages: [
-                nodeGreetingMessage(key),
-                message,
-              ],
+              messages: [nodeGreetingMessage(threadKey), message],
+              unread: 1,
             },
             ...next,
           ];
@@ -803,12 +828,12 @@ export function DmProvider({
       }
       return next;
     });
-  }, [slug]);
+  }, [slug, activeId]);
 
   useEffect(() => {
     if (guest) return;
     void ingestMailbox();
-    const timer = window.setInterval(() => void ingestMailbox(), 12000);
+    const timer = window.setInterval(() => void ingestMailbox(), 4000);
     const channel = supabase
       .channel(`mailbox:${slug}`)
       .on(
@@ -835,6 +860,85 @@ export function DmProvider({
       (msg) => msg.direction === "sent" && msg.relay === "mailbox",
     ),
   );
+
+  const hasPendingKeys = threads.some((row) =>
+    row.messages.some(
+      (msg) => msg.direction === "sent" && msg.relay === "pending-keys",
+    ),
+  );
+
+  useEffect(() => {
+    if (guest || !hasPendingKeys) return;
+    let cancelled = false;
+    const inflight = new Set<string>();
+    async function flush() {
+      for (const thread of threadsRef.current) {
+        const recipient =
+          sidebarPeerHandle(thread, slug) ||
+          thread.peerUsername ||
+          peerUsernameFromHandle(thread.handle ?? "");
+        if (!recipient) continue;
+        for (const msg of thread.messages) {
+          if (cancelled) return;
+          if (msg.direction !== "sent" || msg.relay !== "pending-keys") continue;
+          if (inflight.has(msg.id)) continue;
+          inflight.add(msg.id);
+          try {
+            const queued =
+              msg.fileName && msg.fileUrl
+                ? await (async () => {
+                    const blob = await fetch(msg.fileUrl as string).then((r) =>
+                      r.blob(),
+                    );
+                    return queueMailboxFile({
+                      sender: slug,
+                      recipient,
+                      sessionKey: thread.sessionKey,
+                      file: new File([blob], msg.fileName as string, {
+                        type: blob.type,
+                      }),
+                    });
+                  })()
+                : await queueMailboxMessage({
+                    sender: slug,
+                    recipient,
+                    sessionKey: thread.sessionKey,
+                    body: msg.body,
+                  });
+            if (cancelled || !queued.ok) continue;
+            setThreads((rows) =>
+              rows.map((row) =>
+                row.id === thread.id
+                  ? {
+                      ...row,
+                      messages: row.messages.map((item) =>
+                        item.id === msg.id
+                          ? {
+                              ...item,
+                              pendingId: queued.id,
+                              relay: "mailbox" as const,
+                            }
+                          : item,
+                      ),
+                    }
+                  : row,
+              ),
+            );
+          } catch {
+            /* keep waiting for X3DH bundle */
+          } finally {
+            inflight.delete(msg.id);
+          }
+        }
+      }
+    }
+    void flush();
+    const timer = window.setInterval(() => void flush(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [guest, slug, hasPendingKeys]);
 
   useEffect(() => {
     if (guest || !hasMailboxQueue) return;

@@ -77,11 +77,13 @@ export function ChatMessage({
     msg.body
   );
   const status =
-    msg.relay === "mailbox"
-      ? "Encrypted in mailbox"
-      : msg.relay === "purged" || connected
-        ? "Delivered · peer to peer"
-        : "Encrypted · pending peer";
+    msg.relay === "pending-keys"
+      ? "Waiting for recipient to initialize security keys"
+      : msg.relay === "mailbox"
+        ? "Encrypted in mailbox"
+        : msg.relay === "purged" || connected
+          ? "Delivered · peer to peer"
+          : "Encrypted · pending peer";
 
   if (system) {
     const title = msg.title?.trim() || P2P_ENCLAVE_TITLE;

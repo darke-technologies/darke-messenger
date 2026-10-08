@@ -316,7 +316,7 @@ export function SettingsPane({
         <h3>Invites</h3>
         <p className="invite-count">{visitors == null ? "—" : visitors}</p>
         <p className="settings-help">
-          Share this link. Friends open darke.ai. Each unique visit is counted.
+          Share this link. Friends open darkemessenger.com. Each unique visit is counted.
         </p>
         <div className="invite-row">
           <input

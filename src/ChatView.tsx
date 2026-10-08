@@ -20,6 +20,7 @@ import {
   markNodeGreetingRevealed,
   nodeFingerprint,
   nodeGreetingAlreadyRevealed,
+  sidebarPeerHandle,
 } from "./chatService";
 import {
   CHAT_FOCUS_EVENT,
@@ -43,6 +44,7 @@ import type { TeamMovePreview } from "./teamService";
 import {
   hasOpenSignalSession,
   initializeX3DHSession,
+  isSignalV2Ciphertext,
   unwrapTextPayload,
   wrapTextPayload,
 } from "./lib/crypto/signal";
@@ -74,6 +76,7 @@ export function ChatView() {
   );
   const live = channel.connectionState;
   const connected = live === "CONNECTED";
+  const p2pLive = channel.p2pLive;
   const { typingUsers, notifyTyping, stopTyping } = useTypingSignal({
     channel,
     handle: slug,
@@ -221,11 +224,14 @@ export function ChatView() {
 
   const signalPeer = useMemo(() => {
     if (!active || threadIsGroup(active)) return "";
-    return (active.peerUsername || active.handle || "")
-      .replace(/^@/, "")
-      .trim()
-      .toLowerCase();
-  }, [active]);
+    return (
+      sidebarPeerHandle(active, slug) ||
+      (active.peerUsername || active.handle || "")
+        .replace(/^@/, "")
+        .trim()
+        .toLowerCase()
+    );
+  }, [active, slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,13 +252,11 @@ export function ChatView() {
   useEffect(() => {
     return channel.onMessage((payload, replyToMessageId) => {
       void (async () => {
-        const text = signalPeer
-          ? await unwrapTextPayload(signalPeer, payload)
-          : payload;
+        if (!signalPeer || !isSignalV2Ciphertext(payload)) return;
+        const text = await unwrapTextPayload(signalPeer, payload);
+        if (!text) return;
         receivePeerChat(text, { replyToMessageId });
-        if (signalPeer) {
-          setSignalSession(await hasOpenSignalSession(signalPeer));
-        }
+        setSignalSession(await hasOpenSignalSession(signalPeer));
       })();
     });
   }, [channel, receivePeerChat, signalPeer]);
@@ -261,21 +265,19 @@ export function ChatView() {
     e?.preventDefault();
     const text = composer.trim();
     if (!text || !active) return;
-    if (connected) {
-      const replyId = replyTo?.id;
+    const replyId = replyTo?.id;
+    if (p2pLive && signalPeer) {
       void (async () => {
-        const payload = signalPeer
-          ? await wrapTextPayload(signalPeer, text)
-          : text;
+        const payload = await wrapTextPayload(signalPeer, text);
+        if (!payload || !isSignalV2Ciphertext(payload)) return;
         channel.sendMessage(payload, replyId);
-        if (signalPeer) {
-          setSignalSession(await hasOpenSignalSession(signalPeer));
-        }
+        setSignalSession(await hasOpenSignalSession(signalPeer));
       })();
-      void sendChat(text, { replyToMessageId: replyId });
-    } else {
-      void sendChat(text, { mailbox: true, replyToMessageId: replyTo?.id });
     }
+    void sendChat(text, {
+      mailbox: !p2pLive,
+      replyToMessageId: replyId,
+    });
     stopTyping();
     setComposer("");
     setReplyTo(null);
@@ -288,11 +290,7 @@ export function ChatView() {
 
   function attachFile(file: File | undefined) {
     if (!file || !active) return;
-    if (connected) {
-      void sendChat("", { file });
-    } else {
-      void sendChat("", { mailbox: true, file });
-    }
+    void sendChat("", { mailbox: !p2pLive, file });
   }
 
   const youFp = nodeFingerprint(`${active?.sessionKey ?? ""}:you:${slug}`);

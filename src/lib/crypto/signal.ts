@@ -394,6 +394,11 @@ export function parseSignalPayload(raw: string): SignalEnvelope | null {
   }
 }
 
+export function isSignalV2Ciphertext(raw: string): boolean {
+  const envelope = parseSignalPayload(raw);
+  return Boolean(envelope && envelope.v === 2 && envelope.proto === "signal");
+}
+
 function binaryStringToBytes(value: string): Uint8Array {
   const out = new Uint8Array(value.length);
   for (let i = 0; i < value.length; i += 1) out[i] = value.charCodeAt(i) & 0xff;
@@ -652,6 +657,13 @@ export async function fetchRecipientPreKeyBundle(
     .eq("username", slug)
     .maybeSingle();
   if (error || !user) return null;
+  if (
+    !String(user.identity_key || "").trim() ||
+    !String(user.signed_prekey || "").trim() ||
+    !String(user.signed_prekey_sig || "").trim()
+  ) {
+    return null;
+  }
 
   const { data: claimed } = await supabase.rpc("claim_prekey", {
     p_username: slug,
@@ -707,32 +719,35 @@ export async function ensureSession(peerUsername: string): Promise<boolean> {
   return initializeX3DHSession(peerUsername);
 }
 
-export async function wrapTextPayload(
+async function encryptEnvelope(
   peerUsername: string,
-  plaintext: string,
-): Promise<string> {
-  const text = plaintext ?? "";
-  if (!text) return text;
+  bytes: Uint8Array,
+): Promise<string | null> {
+  if (!bytes.length) return null;
   return withPeerLock(peerUsername, async () => {
     try {
       const ok = await initializeX3DHSession(peerUsername);
-      if (!ok) return text;
+      if (!ok) return null;
       const store = await getStore();
       const cipher = new SessionCipher(store, signalAddress(peerUsername));
-      const encrypted = await cipher.encrypt(new TextEncoder().encode(text));
-      return JSON.stringify(envelopeFromCipher(encrypted));
+      const encrypted = await cipher.encrypt(bytes);
+      const envelope = envelopeFromCipher(encrypted);
+      if (envelope.v !== 2 || envelope.proto !== "signal" || !envelope.body) {
+        return null;
+      }
+      return JSON.stringify(envelope);
     } catch {
-      return text;
+      return null;
     }
   });
 }
 
-export async function unwrapTextPayload(
+async function decryptEnvelope(
   peerUsername: string,
   payload: string,
-): Promise<string> {
+): Promise<Uint8Array | null> {
   const envelope = parseSignalPayload(payload);
-  if (!envelope) return payload;
+  if (!envelope) return null;
   return withPeerLock(peerUsername, async () => {
     try {
       await ensureLocalSignalIdentity();
@@ -743,9 +758,67 @@ export async function unwrapTextPayload(
         envelope.type === EncryptionResultMessageType.PreKeyWhisperMessage
           ? await cipher.decryptPreKeyWhisperMessage(body, "binary")
           : await cipher.decryptWhisperMessage(body, "binary");
-      return new TextDecoder().decode(plain);
+      return plain instanceof Uint8Array ? plain : new Uint8Array(plain);
     } catch {
-      return payload;
+      return null;
     }
   });
+}
+
+export async function peekPublishedPreKeyBundle(
+  username: string,
+): Promise<boolean> {
+  const slug = toSlug(username);
+  if (!slug) return false;
+  const { data, error } = await supabase
+    .from("users")
+    .select("identity_key,signed_prekey,signed_prekey_sig,registration_id")
+    .eq("username", slug)
+    .maybeSingle();
+  if (error || !data) return false;
+  return (
+    String(data.identity_key || "").length > 8 &&
+    String(data.signed_prekey || "").length > 8 &&
+    String(data.signed_prekey_sig || "").length > 8 &&
+    Number(data.registration_id) > 0
+  );
+}
+
+export async function recipientCanReceiveSignal(
+  username: string,
+): Promise<boolean> {
+  if (await hasOpenSignalSession(username)) return true;
+  return peekPublishedPreKeyBundle(username);
+}
+
+export async function wrapTextPayload(
+  peerUsername: string,
+  plaintext: string,
+): Promise<string | null> {
+  const text = plaintext ?? "";
+  if (!text) return null;
+  return encryptEnvelope(peerUsername, new TextEncoder().encode(text));
+}
+
+export async function wrapBytesPayload(
+  peerUsername: string,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  return encryptEnvelope(peerUsername, bytes);
+}
+
+export async function unwrapTextPayload(
+  peerUsername: string,
+  payload: string,
+): Promise<string | null> {
+  const plain = await decryptEnvelope(peerUsername, payload);
+  if (!plain) return null;
+  return new TextDecoder().decode(plain);
+}
+
+export async function unwrapBytesPayload(
+  peerUsername: string,
+  payload: string,
+): Promise<Uint8Array | null> {
+  return decryptEnvelope(peerUsername, payload);
 }

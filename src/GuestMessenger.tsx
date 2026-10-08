@@ -11,6 +11,7 @@ import { useTypingSignal } from "./useTypingSignal";
 import {
   hasOpenSignalSession,
   initializeX3DHSession,
+  isSignalV2Ciphertext,
   unwrapTextPayload,
   wrapTextPayload,
 } from "./lib/crypto/signal";
@@ -138,13 +139,11 @@ function GuestChatPane({ host }: { host: boolean }) {
   useEffect(() => {
     return channel.onMessage((payload, replyToMessageId) => {
       void (async () => {
-        const text = signalPeer
-          ? await unwrapTextPayload(signalPeer, payload)
-          : payload;
+        if (!signalPeer || !isSignalV2Ciphertext(payload)) return;
+        const text = await unwrapTextPayload(signalPeer, payload);
+        if (!text) return;
         receivePeerChat(text, { replyToMessageId });
-        if (signalPeer) {
-          setSignalSession(await hasOpenSignalSession(signalPeer));
-        }
+        setSignalSession(await hasOpenSignalSession(signalPeer));
       })();
     });
   }, [channel, receivePeerChat, signalPeer]);
@@ -153,16 +152,15 @@ function GuestChatPane({ host }: { host: boolean }) {
     e?.preventDefault();
     const text = composer.trim();
     if (!text || !active) return;
-    void (async () => {
-      const payload = signalPeer
-        ? await wrapTextPayload(signalPeer, text)
-        : text;
-      channel.sendMessage(payload);
-      if (signalPeer) {
+    if (channel.p2pLive && signalPeer) {
+      void (async () => {
+        const payload = await wrapTextPayload(signalPeer, text);
+        if (!payload || !isSignalV2Ciphertext(payload)) return;
+        channel.sendMessage(payload);
         setSignalSession(await hasOpenSignalSession(signalPeer));
-      }
-    })();
-    void sendChat(text);
+      })();
+    }
+    void sendChat(text, { mailbox: !channel.p2pLive });
     stopTyping();
     setComposer("");
   }

@@ -864,7 +864,9 @@ export function rotateTeamInvite(slug: string, teamId: string): DarkeTeam | null
 export function teamInviteUrl(team: DarkeTeam): string {
   const token = team.invite?.token || "";
   const origin =
-    typeof window !== "undefined" ? window.location.origin : "https://darke.ai";
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://darke-messenger-q2d1.vercel.app";
   return `${origin}${teamCenterPath(team.slug || team.id)}?join=${encodeURIComponent(token)}`;
 }
 

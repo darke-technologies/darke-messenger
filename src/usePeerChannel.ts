@@ -19,6 +19,7 @@ import {
  */
 export type PeerChannel = {
   connectionState: PeerConnectionState;
+  p2pLive: boolean;
   sendMessage: (payload: string, replyToMessageId?: string) => void;
   sendTyping: (kind: TypingKind, handle: string) => void;
   onMessage: (
@@ -106,6 +107,7 @@ export function usePeerChannel(
   return useMemo(
     () => ({
       connectionState,
+      p2pLive: false,
       sendMessage,
       sendTyping,
       onMessage,

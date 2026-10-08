@@ -1,6 +1,6 @@
 import { publicError, supabase, supabaseFetch, withTimeout } from "./supabase";
 
-export const INVITE_ORIGIN = "https://darke.ai";
+export const INVITE_ORIGIN = "https://www.darkemessenger.com";
 
 export function inviteUrlForSlug(slug: string): string {
   const name = slug.trim().toLowerCase();

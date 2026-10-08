@@ -1,6 +1,6 @@
 /**
- * Drop this on darke.ai (before </body>).
- * Unique visitors per invite link: https://darke.ai/?ref=<username>
+ * Drop this on https://www.darkemessenger.com (before </body>).
+ * Unique visitors per invite link: https://www.darkemessenger.com/?ref=<username>
  *
  * Set your public Supabase URL + anon key (same values as the DARKE app .env).
  */
