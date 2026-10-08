@@ -85,6 +85,17 @@ export function ChatMessage({
       ? "Waiting for recipient to initialize security keys"
       : null;
 
+  const replyBtn = (
+    <button
+      type="button"
+      className="newsfeed-reply-btn"
+      onClick={() => onReply(msg)}
+    >
+      <ReplyIcon />
+      Reply
+    </button>
+  );
+
   if (system) {
     const title = msg.title?.trim() || P2P_ENCLAVE_TITLE;
     const body =
@@ -115,6 +126,7 @@ export function ChatMessage({
           initialsLength={2}
         />
       ) : null}
+      {mine && !isGroup ? replyBtn : null}
       <div className="dm-bubble-col">
         {!mine && isGroup ? (
           <span className="dm-bubble-name">
@@ -134,23 +146,30 @@ export function ChatMessage({
           <p className="dm-quote is-missing">Original message unavailable</p>
         ) : null}
         <div className={`dm-bubble${mine ? " is-sent" : " is-received"}`}>
-          <p>{body}</p>
-          {!isGroup ? (
-            <time className="dm-bubble-time" dateTime={new Date(msg.at).toISOString()}>
+          <p>
+            {body}
+            {mine && !isGroup ? (
+              <time
+                className="dm-bubble-time"
+                dateTime={new Date(msg.at).toISOString()}
+              >
+                {formatBubbleTime(msg.at)}
+              </time>
+            ) : null}
+          </p>
+          {!mine && !isGroup ? (
+            <time
+              className="dm-bubble-time"
+              dateTime={new Date(msg.at).toISOString()}
+            >
               {formatBubbleTime(msg.at)}
             </time>
           ) : null}
         </div>
         {mine && status ? <span className="dm-bubble-status">{status}</span> : null}
-        <button
-          type="button"
-          className="newsfeed-reply-btn"
-          onClick={() => onReply(msg)}
-        >
-          <ReplyIcon />
-          Reply
-        </button>
+        {isGroup ? replyBtn : null}
       </div>
+      {!mine && !isGroup ? replyBtn : null}
     </article>
   );
 }
