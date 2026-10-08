@@ -8,6 +8,12 @@ import { TypingBar } from "./TypingBar";
 import { JoinRoute } from "./JoinRoute";
 import { usePeerChannel } from "./usePeerChannel";
 import { useTypingSignal } from "./useTypingSignal";
+import {
+  hasOpenSignalSession,
+  initializeX3DHSession,
+  unwrapTextPayload,
+  wrapTextPayload,
+} from "./lib/crypto/signal";
 
 type Props = {
   onHome: () => void;
@@ -74,6 +80,7 @@ function GuestChatPane({ host }: { host: boolean }) {
   const {
     active,
     sendChat,
+    receivePeerChat,
     roomReady,
     dismissRoomReady,
     copyChatLink,
@@ -92,6 +99,7 @@ function GuestChatPane({ host }: { host: boolean }) {
       .toLowerCase() || null,
   );
   const [composer, setComposer] = useState("");
+  const [signalSession, setSignalSession] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const connected = channel.connectionState === "CONNECTED";
@@ -106,12 +114,55 @@ function GuestChatPane({ host }: { host: boolean }) {
     if (node) node.scrollTop = node.scrollHeight;
   }, [active?.id, active?.messages.length]);
 
+  const signalPeer = (active?.peerUsername || active?.handle || "")
+    .replace(/^@/, "")
+    .trim()
+    .toLowerCase();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!signalPeer) {
+      setSignalSession(false);
+      return;
+    }
+    void (async () => {
+      await initializeX3DHSession(signalPeer);
+      const live = await hasOpenSignalSession(signalPeer);
+      if (!cancelled) setSignalSession(live);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [signalPeer, connected, active?.id]);
+
+  useEffect(() => {
+    return channel.onMessage((payload, replyToMessageId) => {
+      void (async () => {
+        const text = signalPeer
+          ? await unwrapTextPayload(signalPeer, payload)
+          : payload;
+        receivePeerChat(text, { replyToMessageId });
+        if (signalPeer) {
+          setSignalSession(await hasOpenSignalSession(signalPeer));
+        }
+      })();
+    });
+  }, [channel, receivePeerChat, signalPeer]);
+
   function send(e?: FormEvent) {
     e?.preventDefault();
     const text = composer.trim();
     if (!text || !active) return;
-    channel.sendMessage(text);
-    sendChat(text);
+    void (async () => {
+      const payload = signalPeer
+        ? await wrapTextPayload(signalPeer, text)
+        : text;
+      channel.sendMessage(payload);
+      if (signalPeer) {
+        setSignalSession(await hasOpenSignalSession(signalPeer));
+      }
+    })();
+    void sendChat(text);
     stopTyping();
     setComposer("");
   }
@@ -138,8 +189,17 @@ function GuestChatPane({ host }: { host: boolean }) {
           <h2>{active.displayName}</h2>
           <p>@{active.handle}</p>
         </div>
-        <p className={`dm-sec-badge${connected ? " is-on" : ""}`}>
-          P2P ENCRYPTED • GUEST NODE
+        <p
+          className={`dm-sec-badge${connected || signalSession ? " is-on" : ""}`}
+          title={
+            signalSession
+              ? "Signal session active. Messages are end-to-end encrypted."
+              : "Peer channel encrypted. Establishing a Signal session…"
+          }
+        >
+          {signalSession
+            ? "E2EE · SIGNAL • GUEST NODE"
+            : "P2P ENCRYPTED • GUEST NODE"}
         </p>
       </header>
       <div className="dm-stream" ref={streamRef}>

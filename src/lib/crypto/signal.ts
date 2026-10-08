@@ -2,6 +2,7 @@ import {
   Direction,
   EncryptionResultMessageType,
   KeyHelper,
+  proto,
   SessionBuilder,
   SessionCipher,
   SignalProtocolAddress,
@@ -22,13 +23,52 @@ const IDB_STORE = "kv";
 const LS_READY = "darke.signal.ready";
 const SIGNED_PREKEY_ID = 1;
 
+/** Double Ratchet header carried beside the libsignal protobuf body. */
+export type RatchetHeader = {
+  /** Sender DH / ephemeral ratchet public key (base64). */
+  dh: string;
+  /** Message number in the current sending chain. */
+  n: number;
+  /** Length of the previous sending chain (PN). */
+  pn: number;
+};
+
 export type SignalEnvelope = {
-  v: 1;
+  v: 1 | 2;
   proto: "signal";
   type: number;
   body: string;
   registrationId?: number;
+  header?: RatchetHeader;
 };
+
+export type PublicPreKeyBundle = {
+  username: string;
+  identityKey: Uint8Array;
+  registrationId: number;
+  signedPreKey: {
+    keyId: number;
+    publicKey: Uint8Array;
+    signature: Uint8Array;
+  };
+  oneTimePreKey?: { keyId: number; publicKey: Uint8Array };
+};
+
+const peerLocks = new Map<string, Promise<unknown>>();
+
+function withPeerLock<T>(peer: string, job: () => Promise<T>): Promise<T> {
+  const key = toSlug(peer);
+  const prior = peerLocks.get(key) ?? Promise.resolve();
+  const next = prior.then(job, job);
+  peerLocks.set(
+    key,
+    next.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return next;
+}
 
 type StoreDump = Record<string, unknown>;
 
@@ -143,13 +183,28 @@ class DarkeSignalStore implements StorageType {
     }
   }
 
+  private persistChain: Promise<void> = Promise.resolve();
+
   private schedulePersist(): void {
     if (typeof window === "undefined") return;
     if (this.persistTimer != null) window.clearTimeout(this.persistTimer);
     this.persistTimer = window.setTimeout(() => {
       this.persistTimer = null;
-      void idbSet("dump", JSON.stringify(encodeStoreValue(this.data)));
+      void this.persistNow();
     }, 20);
+  }
+
+  persistNow(): Promise<void> {
+    if (typeof window === "undefined") return Promise.resolve();
+    if (this.persistTimer != null) {
+      window.clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    const snapshot = JSON.stringify(encodeStoreValue(this.data));
+    this.persistChain = this.persistChain
+      .then(() => idbSet("dump", snapshot))
+      .catch(() => undefined);
+    return this.persistChain;
   }
 
   get(key: string): unknown {
@@ -198,6 +253,7 @@ class DarkeSignalStore implements StorageType {
     const name = address.getName();
     const existing = this.get("identityKey" + name);
     this.put("identityKey" + name, publicKey);
+    await this.persistNow();
     if (!(existing instanceof Uint8Array)) return false;
     if (existing.length !== publicKey.length) return true;
     return existing.some((byte, i) => byte !== publicKey[i]);
@@ -214,10 +270,12 @@ class DarkeSignalStore implements StorageType {
     keyPair: KeyPairType,
   ): Promise<void> {
     this.put("25519KeypreKey" + keyId, keyPair);
+    await this.persistNow();
   }
 
   async removePreKey(keyId: number | string): Promise<void> {
     this.remove("25519KeypreKey" + keyId);
+    await this.persistNow();
   }
 
   async loadSignedPreKey(
@@ -233,6 +291,7 @@ class DarkeSignalStore implements StorageType {
     keyPair: KeyPairType,
   ): Promise<void> {
     this.put("25519KeysignedKey" + keyId, keyPair);
+    await this.persistNow();
   }
 
   async removeSignedPreKey(keyId: number | string): Promise<void> {
@@ -252,6 +311,7 @@ class DarkeSignalStore implements StorageType {
     record: SessionRecordType,
   ): Promise<void> {
     this.put("session" + identifier, record);
+    await this.persistNow();
   }
 
   unusedPreKeyIds(): number[] {
@@ -282,7 +342,29 @@ async function getStore(): Promise<DarkeSignalStore> {
   const store = new DarkeSignalStore();
   await store.hydrate();
   storeSingleton = store;
+  if (typeof window !== "undefined") {
+    const flush = () => {
+      void store.persistNow();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+  }
   return store;
+}
+
+export async function hasOpenSignalSession(
+  peerUsername: string,
+): Promise<boolean> {
+  const slug = toSlug(peerUsername);
+  if (!slug || typeof window === "undefined") return false;
+  try {
+    await ensureLocalSignalIdentity();
+    const store = await getStore();
+    const cipher = new SessionCipher(store, signalAddress(slug));
+    return cipher.hasOpenSession();
+  } catch {
+    return false;
+  }
 }
 
 export function signalAddress(username: string): SignalProtocolAddress {
@@ -293,7 +375,7 @@ export function isSignalEnvelope(value: unknown): value is SignalEnvelope {
   if (!value || typeof value !== "object") return false;
   const rec = value as SignalEnvelope;
   return (
-    rec.v === 1 &&
+    (rec.v === 1 || rec.v === 2) &&
     rec.proto === "signal" &&
     typeof rec.type === "number" &&
     typeof rec.body === "string" &&
@@ -312,14 +394,80 @@ export function parseSignalPayload(raw: string): SignalEnvelope | null {
   }
 }
 
+function binaryStringToBytes(value: string): Uint8Array {
+  const out = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i += 1) out[i] = value.charCodeAt(i) & 0xff;
+  return out;
+}
+
+type WhisperFields = {
+  ratchetKey?: Uint8Array;
+  counter?: number;
+  previousCounter?: number;
+};
+
+function decodeWhisper(bytes: Uint8Array): WhisperFields | null {
+  const ts = (
+    proto as {
+      textsecure?: {
+        SignalMessage: { decode: (b: Uint8Array) => WhisperFields };
+        PreKeySignalMessage: { decode: (b: Uint8Array) => { message?: Uint8Array } };
+      };
+    }
+  ).textsecure;
+  if (!ts) return null;
+  try {
+    if (bytes.length < 10) return null;
+    return ts.SignalMessage.decode(bytes.subarray(1, bytes.length - 8));
+  } catch {
+    return null;
+  }
+}
+
+function ratchetHeaderFromCipher(msg: MessageType): RatchetHeader | undefined {
+  const body = msg.body ?? "";
+  if (!body) return undefined;
+  const raw = binaryStringToBytes(body);
+  const ts = (
+    proto as {
+      textsecure?: {
+        SignalMessage: { decode: (b: Uint8Array) => WhisperFields };
+        PreKeySignalMessage: {
+          decode: (b: Uint8Array) => { message?: Uint8Array };
+        };
+      };
+    }
+  ).textsecure;
+  if (!ts) return undefined;
+  try {
+    let whisper = raw;
+    if (msg.type === EncryptionResultMessageType.PreKeyWhisperMessage) {
+      const pre = ts.PreKeySignalMessage.decode(raw.subarray(1));
+      if (!pre.message || pre.message.length < 10) return undefined;
+      whisper = pre.message;
+    }
+    const fields = decodeWhisper(whisper);
+    if (!fields?.ratchetKey) return undefined;
+    return {
+      dh: bytesToB64(toU8(fields.ratchetKey)),
+      n: Number(fields.counter ?? 0),
+      pn: Number(fields.previousCounter ?? 0),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function envelopeFromCipher(msg: MessageType): SignalEnvelope {
   const body = msg.body ?? "";
+  const header = ratchetHeaderFromCipher(msg);
   return {
-    v: 1,
+    v: 2,
     proto: "signal",
     type: msg.type,
     body: bytesToB64(new TextEncoder().encode(body)),
     registrationId: msg.registrationId,
+    ...(header ? { header } : {}),
   };
 }
 
@@ -478,9 +626,22 @@ export async function bootstrapSignalProtocol(): Promise<void> {
   await ensureLocalSignalIdentity();
 }
 
-type RemoteBundle = DeviceType<Uint8Array> & { registrationId: number };
+function toDeviceType(bundle: PublicPreKeyBundle): DeviceType<Uint8Array> {
+  return {
+    identityKey: bundle.identityKey,
+    registrationId: bundle.registrationId,
+    signedPreKey: bundle.signedPreKey,
+    ...(bundle.oneTimePreKey ? { preKey: bundle.oneTimePreKey } : {}),
+  };
+}
 
-async function fetchPeerBundle(username: string): Promise<RemoteBundle | null> {
+/**
+ * Fetch a recipient's public X3DH prekey bundle from Supabase
+ * (`users` identity + signed prekey, `prekeys` one-time key via claim_prekey).
+ */
+export async function fetchRecipientPreKeyBundle(
+  username: string,
+): Promise<PublicPreKeyBundle | null> {
   const slug = toSlug(username);
   if (!slug) return null;
   const { data: user, error } = await supabase
@@ -508,6 +669,7 @@ async function fetchPeerBundle(username: string): Promise<RemoteBundle | null> {
       : undefined;
 
   return {
+    username: slug,
     identityKey: b64ToBytes(String(user.identity_key)),
     registrationId: Number(user.registration_id),
     signedPreKey: {
@@ -515,11 +677,17 @@ async function fetchPeerBundle(username: string): Promise<RemoteBundle | null> {
       publicKey: b64ToBytes(String(user.signed_prekey)),
       signature: b64ToBytes(String(user.signed_prekey_sig)),
     },
-    ...(preKey ? { preKey } : {}),
+    ...(preKey ? { oneTimePreKey: preKey } : {}),
   };
 }
 
-export async function ensureSession(peerUsername: string): Promise<boolean> {
+/**
+ * X3DH handshake: consume the peer bundle and persist a Double Ratchet
+ * session whose root key is the X3DH shared master secret.
+ */
+export async function initializeX3DHSession(
+  peerUsername: string,
+): Promise<boolean> {
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return false;
   const slug = toSlug(peerUsername);
@@ -528,11 +696,15 @@ export async function ensureSession(peerUsername: string): Promise<boolean> {
   const address = signalAddress(slug);
   const cipher = new SessionCipher(store, address);
   if (await cipher.hasOpenSession()) return true;
-  const bundle = await fetchPeerBundle(slug);
+  const bundle = await fetchRecipientPreKeyBundle(slug);
   if (!bundle) return false;
   const builder = new SessionBuilder(store, address);
-  await builder.processPreKey(bundle);
+  await builder.processPreKey(toDeviceType(bundle));
   return cipher.hasOpenSession();
+}
+
+export async function ensureSession(peerUsername: string): Promise<boolean> {
+  return initializeX3DHSession(peerUsername);
 }
 
 export async function wrapTextPayload(
@@ -541,16 +713,18 @@ export async function wrapTextPayload(
 ): Promise<string> {
   const text = plaintext ?? "";
   if (!text) return text;
-  try {
-    const ok = await ensureSession(peerUsername);
-    if (!ok) return text;
-    const store = await getStore();
-    const cipher = new SessionCipher(store, signalAddress(peerUsername));
-    const encrypted = await cipher.encrypt(new TextEncoder().encode(text));
-    return JSON.stringify(envelopeFromCipher(encrypted));
-  } catch {
-    return text;
-  }
+  return withPeerLock(peerUsername, async () => {
+    try {
+      const ok = await initializeX3DHSession(peerUsername);
+      if (!ok) return text;
+      const store = await getStore();
+      const cipher = new SessionCipher(store, signalAddress(peerUsername));
+      const encrypted = await cipher.encrypt(new TextEncoder().encode(text));
+      return JSON.stringify(envelopeFromCipher(encrypted));
+    } catch {
+      return text;
+    }
+  });
 }
 
 export async function unwrapTextPayload(
@@ -559,17 +733,19 @@ export async function unwrapTextPayload(
 ): Promise<string> {
   const envelope = parseSignalPayload(payload);
   if (!envelope) return payload;
-  try {
-    await ensureLocalSignalIdentity();
-    const store = await getStore();
-    const cipher = new SessionCipher(store, signalAddress(peerUsername));
-    const body = cipherBodyFromEnvelope(envelope);
-    const plain =
-      envelope.type === EncryptionResultMessageType.PreKeyWhisperMessage
-        ? await cipher.decryptPreKeyWhisperMessage(body, "binary")
-        : await cipher.decryptWhisperMessage(body, "binary");
-    return new TextDecoder().decode(plain);
-  } catch {
-    return payload;
-  }
+  return withPeerLock(peerUsername, async () => {
+    try {
+      await ensureLocalSignalIdentity();
+      const store = await getStore();
+      const cipher = new SessionCipher(store, signalAddress(peerUsername));
+      const body = cipherBodyFromEnvelope(envelope);
+      const plain =
+        envelope.type === EncryptionResultMessageType.PreKeyWhisperMessage
+          ? await cipher.decryptPreKeyWhisperMessage(body, "binary")
+          : await cipher.decryptWhisperMessage(body, "binary");
+      return new TextDecoder().decode(plain);
+    } catch {
+      return payload;
+    }
+  });
 }

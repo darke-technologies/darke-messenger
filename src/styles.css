@@ -22923,6 +22923,11 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   color: #d4d4d8;
 }
 
+.chat-sec-pill.is-signal {
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #6ee7b7;
+}
+
 .chat-sec-pill-icon {
   width: 14px;
   height: 14px;

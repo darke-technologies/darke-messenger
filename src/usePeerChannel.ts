@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PeerConnectionState } from "./dmSessions";
 import {
-  unwrapTextPayload,
-  wrapTextPayload,
-} from "./lib/crypto/signal";
-import {
   encodeChat,
   encodeTyping,
   isTypingFrame,
@@ -25,7 +21,9 @@ export type PeerChannel = {
   connectionState: PeerConnectionState;
   sendMessage: (payload: string, replyToMessageId?: string) => void;
   sendTyping: (kind: TypingKind, handle: string) => void;
-  onMessage: (handler: (payload: string) => void) => () => void;
+  onMessage: (
+    handler: (payload: string, replyToMessageId?: string) => void,
+  ) => () => void;
   onTyping: (handler: (frame: TypingFrame) => void) => () => void;
   ingestRemote: (raw: string) => void;
 };
@@ -38,13 +36,11 @@ export function usePeerChannel(
   const [connectionState, setConnectionState] =
     useState<PeerConnectionState>(peerState);
   const connectedRef = useRef(peerState === "CONNECTED");
-  const peerRef = useRef((peerUsername ?? "").trim().toLowerCase());
-  const messageHandlers = useRef(new Set<(payload: string) => void>());
+  const messageHandlers = useRef(
+    new Set<(payload: string, replyToMessageId?: string) => void>(),
+  );
   const typingHandlers = useRef(new Set<(frame: TypingFrame) => void>());
-
-  useEffect(() => {
-    peerRef.current = (peerUsername ?? "").trim().toLowerCase();
-  }, [peerUsername]);
+  void peerUsername;
 
   useEffect(() => {
     setConnectionState(peerState);
@@ -68,21 +64,15 @@ export function usePeerChannel(
     }
     const body = frame?.type === "MESSAGE" ? frame.body : raw;
     if (!body) return;
-    const peer = peerRef.current;
-    void (async () => {
-      const plain = peer ? await unwrapTextPayload(peer, body) : body;
-      messageHandlers.current.forEach((handler) => handler(plain));
-    })();
+    const reply =
+      frame?.type === "MESSAGE" ? frame.reply_to_message_id : undefined;
+    messageHandlers.current.forEach((handler) => handler(body, reply));
   }, []);
 
   const sendMessage = useCallback(
     (payload: string, replyToMessageId?: string) => {
       if (!payload) return;
-      const peer = peerRef.current;
-      void (async () => {
-        const wrapped = peer ? await wrapTextPayload(peer, payload) : payload;
-        transmit(encodeChat(wrapped, replyToMessageId));
-      })();
+      transmit(encodeChat(payload, replyToMessageId));
     },
     [transmit],
   );
@@ -96,12 +86,15 @@ export function usePeerChannel(
     [transmit],
   );
 
-  const onMessage = useCallback((handler: (payload: string) => void) => {
-    messageHandlers.current.add(handler);
-    return () => {
-      messageHandlers.current.delete(handler);
-    };
-  }, []);
+  const onMessage = useCallback(
+    (handler: (payload: string, replyToMessageId?: string) => void) => {
+      messageHandlers.current.add(handler);
+      return () => {
+        messageHandlers.current.delete(handler);
+      };
+    },
+    [],
+  );
 
   const onTyping = useCallback((handler: (frame: TypingFrame) => void) => {
     typingHandlers.current.add(handler);

@@ -15,6 +15,7 @@ export function ChatHeader({
   teams = [],
   onMoveToTeam,
   isGroup = false,
+  signalSession = false,
 }: {
   title: string;
   subtitle?: string;
@@ -27,6 +28,7 @@ export function ChatHeader({
   teams?: DarkeTeam[];
   onMoveToTeam?: (teamId?: string) => void;
   isGroup?: boolean;
+  signalSession?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -110,9 +112,16 @@ export function ChatHeader({
           {subtitle ? <p className="chat-head-meta">{subtitle}</p> : null}
         </div>
         <div className="chat-head-actions">
-          <span className="chat-sec-pill">
+          <span
+            className={`chat-sec-pill${signalSession ? " is-signal" : ""}`}
+            title={
+              signalSession
+                ? "Signal session active. Messages are end-to-end encrypted."
+                : "Peer channel encrypted. Establishing a Signal session…"
+            }
+          >
             <IconLock className="chat-sec-pill-icon" />
-            P2P · ENCRYPTED
+            {signalSession ? "E2EE · Signal" : "P2P · ENCRYPTED"}
           </span>
           {onMoveToTeam ? (
             <div className="chat-move-wrap" ref={pickRef}>

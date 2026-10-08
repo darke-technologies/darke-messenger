@@ -40,11 +40,18 @@ import { listTeams } from "./teamContainer";
 import { threadIsGroup } from "./chatController";
 import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
 import type { TeamMovePreview } from "./teamService";
+import {
+  hasOpenSignalSession,
+  initializeX3DHSession,
+  unwrapTextPayload,
+  wrapTextPayload,
+} from "./lib/crypto/signal";
 
 export function ChatView() {
   const {
     active,
     sendChat,
+    receivePeerChat,
     copyChatLink,
     copied,
     slug,
@@ -93,6 +100,7 @@ export function ChatView() {
     display: "Peer",
     avatar: null,
   });
+  const [signalSession, setSignalSession] = useState(false);
   const [dayMenu, setDayMenu] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -211,19 +219,60 @@ export function ChatView() {
     node?.scrollIntoView({ block: "center" });
   }, [hitId, active?.id, tab]);
 
+  const signalPeer = useMemo(() => {
+    if (!active || threadIsGroup(active)) return "";
+    return (active.peerUsername || active.handle || "")
+      .replace(/^@/, "")
+      .trim()
+      .toLowerCase();
+  }, [active]);
+
   useEffect(() => {
-    return channel.onMessage(() => {
-      /* DataChannel inbound payloads attach here. */
+    let cancelled = false;
+    if (!signalPeer) {
+      setSignalSession(false);
+      return;
+    }
+    void (async () => {
+      await initializeX3DHSession(signalPeer);
+      const live = await hasOpenSignalSession(signalPeer);
+      if (!cancelled) setSignalSession(live);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [signalPeer, connected, active?.id]);
+
+  useEffect(() => {
+    return channel.onMessage((payload, replyToMessageId) => {
+      void (async () => {
+        const text = signalPeer
+          ? await unwrapTextPayload(signalPeer, payload)
+          : payload;
+        receivePeerChat(text, { replyToMessageId });
+        if (signalPeer) {
+          setSignalSession(await hasOpenSignalSession(signalPeer));
+        }
+      })();
     });
-  }, [channel]);
+  }, [channel, receivePeerChat, signalPeer]);
 
   function send(e?: FormEvent) {
     e?.preventDefault();
     const text = composer.trim();
     if (!text || !active) return;
     if (connected) {
-      channel.sendMessage(text, replyTo?.id);
-      void sendChat(text, { replyToMessageId: replyTo?.id });
+      const replyId = replyTo?.id;
+      void (async () => {
+        const payload = signalPeer
+          ? await wrapTextPayload(signalPeer, text)
+          : text;
+        channel.sendMessage(payload, replyId);
+        if (signalPeer) {
+          setSignalSession(await hasOpenSignalSession(signalPeer));
+        }
+      })();
+      void sendChat(text, { replyToMessageId: replyId });
     } else {
       void sendChat(text, { mailbox: true, replyToMessageId: replyTo?.id });
     }
@@ -333,6 +382,7 @@ export function ChatView() {
         }
         teams={moveTeams}
         isGroup={Boolean(active && threadIsGroup(active))}
+        signalSession={signalSession}
         onMoveToTeam={
           active && !active.teamId
             ? (teamId) => {

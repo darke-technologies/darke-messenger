@@ -39,6 +39,7 @@ import {
   showCopyLinkToast,
 } from "./dmSessions";
 import { bootstrapSignalProtocol } from "./lib/crypto/signal";
+import { supabase } from "./supabase";
 import {
   fetchAndPurgeMailbox,
   listSentMailboxIds,
@@ -136,6 +137,10 @@ type DmContextValue = {
     body: string,
     opts?: { mailbox?: boolean; file?: File; replyToMessageId?: string },
   ) => Promise<void>;
+  receivePeerChat: (
+    body: string,
+    opts?: { replyToMessageId?: string },
+  ) => void;
   renameActive: (name: string) => void;
   renameThread: (id: string, name: string) => void;
   pinThread: (id: string, pinned?: boolean) => void;
@@ -718,6 +723,37 @@ export function DmProvider({
     [activeId, guest, slug],
   );
 
+  const receivePeerChat = useCallback(
+    (body: string, opts?: { replyToMessageId?: string }) => {
+      const text = body.trim();
+      if (!text || !activeId) return;
+      const thread = threadsRef.current.find((row) => row.id === activeId);
+      const quoted = opts?.replyToMessageId
+        ? thread?.messages.find((msg) => msg.id === opts.replyToMessageId)
+        : undefined;
+      const snippet = quoted
+        ? (quoted.fileName || quoted.body).replace(/\s+/g, " ").trim().slice(0, 140)
+        : "";
+      const message: DmMessage = {
+        id: `p2p-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        direction: "received",
+        body: text,
+        at: Date.now(),
+        e2ee: true,
+        replyToMessageId: quoted?.id,
+        replyToSnippet: snippet || undefined,
+      };
+      setThreads((rows) =>
+        rows.map((row) =>
+          row.id === activeId
+            ? { ...row, messages: [...row.messages, message] }
+            : row,
+        ),
+      );
+    },
+    [activeId],
+  );
+
   const ingestMailbox = useCallback(async () => {
     const incoming = await fetchAndPurgeMailbox(slug).catch(() => []);
     if (!incoming.length) return;
@@ -773,8 +809,26 @@ export function DmProvider({
     if (guest) return;
     void ingestMailbox();
     const timer = window.setInterval(() => void ingestMailbox(), 12000);
-    return () => window.clearInterval(timer);
-  }, [guest, ingestMailbox]);
+    const channel = supabase
+      .channel(`mailbox:${slug}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "pending_messages",
+          filter: `recipient_username=eq.${slug}`,
+        },
+        () => {
+          void ingestMailbox();
+        },
+      )
+      .subscribe();
+    return () => {
+      window.clearInterval(timer);
+      void supabase.removeChannel(channel);
+    };
+  }, [guest, ingestMailbox, slug]);
 
   const hasMailboxQueue = threads.some((row) =>
     row.messages.some(
@@ -996,6 +1050,7 @@ export function DmProvider({
       copyChatLink,
       joinPeer,
       sendChat,
+      receivePeerChat,
       renameActive,
       renameThread,
       pinThread,
@@ -1028,6 +1083,7 @@ export function DmProvider({
       copyChatLink,
       joinPeer,
       sendChat,
+      receivePeerChat,
       renameActive,
       renameThread,
       pinThread,
