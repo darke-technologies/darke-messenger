@@ -621,3 +621,30 @@ export function IconEyeOff({ className }: IconProps) {
     </Svg>
   );
 }
+
+export function IconCamera({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M4.5 8.5h2.2l1.3-2h8l1.3 2h2.2A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V10a1.5 1.5 0 0 1 1.5-1.5z" />
+      <circle cx="12" cy="14.2" r="3.1" />
+    </Svg>
+  );
+}
+
+export function IconPhone({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M7.2 3.8h3.1l1.2 3-1.8 1.2a12 12 0 0 0 6.3 6.3l1.2-1.8 3 1.2v3.1c0 .7-.6 1.4-1.3 1.4C10.4 18.2 5.8 13.6 5.8 5.1c0-.7.7-1.3 1.4-1.3z" />
+    </Svg>
+  );
+}
+
+export function IconMoreHorizontal({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="5.5" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="12" r="1.35" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}

@@ -60,6 +60,7 @@ export function applyAccentVars(id: ThemeId, root: HTMLElement = document.docume
   const { r, g, b } = hexToRgb(hex);
   const rgb = `${r}, ${g}, ${b}`;
   root.setAttribute("data-theme", "hud");
+  root.setAttribute("data-accent", id);
   root.style.setProperty("--hud", hex);
   root.style.setProperty("--hover-blue", hex);
   root.style.setProperty("--hud-rgb", rgb);

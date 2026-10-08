@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatTab } from "./useChat";
-import { IconLock } from "./icons";
+import {
+  IconCamera,
+  IconLock,
+  IconMoreHorizontal,
+  IconPhone,
+  IconSearch,
+} from "./icons";
 import type { DarkeTeam } from "./teamContainer";
+import { UserAvatar } from "./UserAvatar";
 
 export function ChatHeader({
   title,
@@ -16,6 +23,12 @@ export function ChatHeader({
   onMoveToTeam,
   isGroup = false,
   signalSession = false,
+  peerAvatar = null,
+  peerHandle = "",
+  onSearch,
+  onChatSettings,
+  onBlock,
+  onDelete,
 }: {
   title: string;
   subtitle?: string;
@@ -29,12 +42,20 @@ export function ChatHeader({
   onMoveToTeam?: (teamId?: string) => void;
   isGroup?: boolean;
   signalSession?: boolean;
+  peerAvatar?: string | null;
+  peerHandle?: string;
+  onSearch?: () => void;
+  onChatSettings?: () => void;
+  onBlock?: () => void;
+  onDelete?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const [pickOpen, setPickOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!editing) setDraft(title);
@@ -45,13 +66,17 @@ export function ChatHeader({
   }, [editing]);
 
   useEffect(() => {
-    if (!pickOpen) return;
+    if (!pickOpen && !menuOpen) return;
     function close(event: MouseEvent) {
-      if (!pickRef.current?.contains(event.target as Node)) setPickOpen(false);
+      const node = event.target as Node;
+      if (pickRef.current?.contains(node)) return;
+      if (menuRef.current?.contains(node)) return;
+      setPickOpen(false);
+      setMenuOpen(false);
     }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [pickOpen]);
+  }, [pickOpen, menuOpen]);
 
   function commit() {
     const next = draft.trim();
@@ -67,6 +92,96 @@ export function ChatHeader({
       return;
     }
     onMoveToTeam(teams[0]?.id);
+  }
+
+  if (!isGroup) {
+    return (
+      <header className="dm-chat-head chat-head is-direct">
+        <div className="chat-head-bar is-direct">
+          <div className="chat-head-identity">
+            <UserAvatar
+              username={title || peerHandle || "peer"}
+              url={peerAvatar}
+              className="chat-head-avatar"
+              initialsLength={2}
+            />
+            <div className="chat-head-title">
+              <h2>{title}</h2>
+            </div>
+          </div>
+          <div className="chat-head-actions is-direct">
+            <button type="button" className="chat-head-icon-btn" aria-label="Camera" title="Camera">
+              <IconCamera />
+            </button>
+            <button type="button" className="chat-head-icon-btn" aria-label="Phone" title="Phone">
+              <IconPhone />
+            </button>
+            <button
+              type="button"
+              className="chat-head-icon-btn"
+              aria-label="Search chat"
+              title="Search chat"
+              onClick={onSearch}
+            >
+              <IconSearch />
+            </button>
+            <div className="chat-head-more" ref={menuRef}>
+              <button
+                type="button"
+                className="chat-head-icon-btn"
+                aria-label="Chat options"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <IconMoreHorizontal />
+              </button>
+              {menuOpen ? (
+                <ul className="chat-head-menu" role="menu">
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onChatSettings?.();
+                      }}
+                    >
+                      Chat Settings
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onBlock?.();
+                      }}
+                    >
+                      Block
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDelete?.();
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                </ul>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </header>
+    );
   }
 
   return (
@@ -132,7 +247,7 @@ export function ChatHeader({
                 aria-expanded={teams.length > 1 ? pickOpen : undefined}
                 onClick={handleMove}
               >
-                {isGroup ? "Move Group to Team" : "Move Chat to Team"}
+                Move Group to Team
               </button>
               {pickOpen && teams.length > 1 ? (
                 <ul className="chat-move-menu" role="listbox" aria-label="Choose a team">

@@ -10,7 +10,7 @@ const STALE_CLEAR_MS = 4000;
 export function useTypingSignal({
   channel,
   handle,
-  connected,
+  connected: _connected,
 }: {
   channel: PeerChannel;
   handle: string;
@@ -107,13 +107,13 @@ export function useTypingSignal({
     if (!sentStart.current) return;
     sentStart.current = false;
     lastStartAt.current = 0;
-    if (connected && handleRef.current) {
+    if (handleRef.current) {
       channel.sendTyping(TYPING_STOP, handleRef.current);
     }
-  }, [channel, connected]);
+  }, [channel]);
 
   const notifyTyping = useCallback(() => {
-    if (!connected || !handleRef.current) return;
+    if (!handleRef.current) return;
     if (idleTimer.current) window.clearTimeout(idleTimer.current);
     idleTimer.current = window.setTimeout(() => emitStop(), IDLE_STOP_MS);
     if (!broadcast) return;
@@ -123,7 +123,7 @@ export function useTypingSignal({
       sentStart.current = true;
       channel.sendTyping(TYPING_START, handleRef.current);
     }
-  }, [broadcast, channel, connected, emitStop]);
+  }, [broadcast, channel, emitStop]);
 
   useEffect(() => {
     if (!broadcast) emitStop();

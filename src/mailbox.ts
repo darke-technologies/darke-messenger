@@ -225,7 +225,21 @@ export type FetchedMailbox = {
   at: number;
 };
 
+const claimedMailboxIds = new Set<string>();
+let mailboxFetchChain: Promise<unknown> = Promise.resolve();
+
 export async function fetchAndPurgeMailbox(
+  recipient: string,
+): Promise<FetchedMailbox[]> {
+  const run = mailboxFetchChain.then(() => loadAndPurgeMailbox(recipient));
+  mailboxFetchChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function loadAndPurgeMailbox(
   recipient: string,
 ): Promise<FetchedMailbox[]> {
   const { data, error } = await supabase
@@ -240,6 +254,7 @@ export async function fetchAndPurgeMailbox(
   for (const raw of data) {
     const row = raw as MailboxRow;
     try {
+      if (claimedMailboxIds.has(row.id)) continue;
       const blob = row.encrypted_content ?? "";
       if (!isSignalV2Ciphertext(blob)) continue;
       const opened = await unwrapTextPayload(row.sender_username, blob);
@@ -265,6 +280,7 @@ export async function fetchAndPurgeMailbox(
         fileUrl = URL.createObjectURL(file);
         fileSize = file.size;
       }
+      claimedMailboxIds.add(row.id);
       out.push({
         id: row.id,
         sender: row.sender_username,

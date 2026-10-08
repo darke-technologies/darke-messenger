@@ -41,6 +41,8 @@ import { listTeams } from "./teamContainer";
 import { threadIsGroup } from "./chatController";
 import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
 import type { TeamMovePreview } from "./teamService";
+import { blockPeer, isPeerBlocked } from "./blockedPeers";
+import { IconSearch } from "./icons";
 import {
   hasOpenSignalSession,
   initializeX3DHSession,
@@ -65,6 +67,7 @@ export function ChatView() {
     bindChatToTeam,
     canInvite,
     joinError,
+    deleteThread,
   } = useChat();
   const channel = usePeerChannel(
     active?.sessionKey ?? null,
@@ -105,6 +108,9 @@ export function ChatView() {
   });
   const [signalSession, setSignalSession] = useState(false);
   const [dayMenu, setDayMenu] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [chatQuery, setChatQuery] = useState("");
+  const [blockedTick, setBlockedTick] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const roster = usePersonDirectory(
@@ -115,6 +121,8 @@ export function ChatView() {
     setReplyTo(null);
     setInviteRequested(false);
     setDayMenu(null);
+    setSearchOpen(false);
+    setChatQuery("");
   }, [active?.id]);
 
   useEffect(() => {
@@ -298,6 +306,32 @@ export function ChatView() {
     `${active?.sessionKey ?? ""}:peer:${active?.handle ?? "peer"}`,
   );
   const ownerHandle = chatOwnerHandle(active, slug);
+  const isGroup = Boolean(active && threadIsGroup(active));
+  const isDirect = Boolean(active && !isGroup);
+  const viewTab = isDirect && tab === "members" ? "messages" : tab;
+  const headerTitle = isDirect
+    ? peer.display?.trim() || peer.handle || title
+    : title;
+  const peerBlocked =
+    isDirect &&
+    Boolean(peer.handle) &&
+    peer.handle !== "peer" &&
+    isPeerBlocked(slug, peer.handle);
+  void blockedTick;
+  const searchHits = useMemo(() => {
+    const q = chatQuery.trim().toLowerCase();
+    if (q.length < 2 || !active) return [];
+    return active.messages.filter((msg) =>
+      (msg.body || msg.fileName || "").toLowerCase().includes(q),
+    );
+  }, [active, chatQuery]);
+
+  useEffect(() => {
+    if (!searchOpen || chatQuery.trim().length < 2) return;
+    const hit = searchHits[searchHits.length - 1];
+    if (!hit) return;
+    setHitId(hit.id);
+  }, [searchOpen, chatQuery, searchHits]);
   const visibleMessages = (active?.messages ?? []).filter(
     (msg) => !active || !messageHasDisappeared(msg, active),
   );
@@ -334,7 +368,7 @@ export function ChatView() {
     node?.scrollIntoView({ block: "start" });
   }
 
-  if (tab === "settings" && active) {
+  if (viewTab === "settings" && active) {
     return (
       <section className="dm-pane">
         <ConversationSettings
@@ -348,11 +382,11 @@ export function ChatView() {
   }
 
   return (
-    <section className="dm-pane">
+    <section className={`dm-pane${isDirect ? " is-direct" : ""}`}>
       <ChatHeader
-        title={title}
+        title={headerTitle}
         subtitle={
-          active
+          isGroup && active
             ? `${chatMemberCount(active, slug)} seats · ${planLabel} · ${listChatMemberHandles(active, slug)
                 .map((h) => {
                   const id = h.replace(/^@/, "").trim().toLowerCase();
@@ -368,21 +402,29 @@ export function ChatView() {
                 .join(", ")}`
             : undefined
         }
-        tab={tab}
+        tab={viewTab}
         onTab={setTab}
         onRename={renameActive}
         canRename={Boolean(active)}
         memberCount={chatMemberCount(active, slug)}
-        handleBadge={
-          active && !threadIsGroup(active) && peer.handle && peer.handle !== "peer"
-            ? `@${peer.handle.replace(/^@/, "")}`
-            : undefined
-        }
+        handleBadge={undefined}
         teams={moveTeams}
-        isGroup={Boolean(active && threadIsGroup(active))}
+        isGroup={isGroup}
         signalSession={signalSession}
+        peerAvatar={peer.avatar}
+        peerHandle={peer.handle}
+        onSearch={() => setSearchOpen((open) => !open)}
+        onChatSettings={() => setTab("settings")}
+        onBlock={() => {
+          if (!peer.handle || peer.handle === "peer") return;
+          blockPeer(slug, peer.handle);
+          setBlockedTick((n) => n + 1);
+        }}
+        onDelete={() => {
+          if (active) deleteThread(active.id);
+        }}
         onMoveToTeam={
-          active && !active.teamId
+          isGroup && active && !active.teamId
             ? (teamId) => {
                 const result = bindChatToTeam(active.id, teamId);
                 if (!result.ok && result.preview?.blocked) {
@@ -393,7 +435,23 @@ export function ChatView() {
         }
       />
 
-      {tab === "members" ? (
+      {isDirect && searchOpen ? (
+        <div className="chat-inline-search">
+          <IconSearch className="chat-inline-search-icon" />
+          <input
+            value={chatQuery}
+            onChange={(e) => setChatQuery(e.target.value)}
+            placeholder="Search this chat"
+            aria-label="Search this chat"
+            autoFocus
+          />
+          {searchHits.length > 0 ? (
+            <span className="chat-inline-search-count">{searchHits.length}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {viewTab === "members" && isGroup ? (
         <MembersTab
           slug={slug}
           active={active}
@@ -408,7 +466,7 @@ export function ChatView() {
         />
       ) : null}
 
-      {tab === "messages" ? (
+      {viewTab === "messages" ? (
         <>
           <div className="dm-stream is-feed" ref={streamRef}>
             {joinError ? (
@@ -424,6 +482,7 @@ export function ChatView() {
               const day = chatDayKey(msg.at);
               const prev = visibleMessages[index - 1];
               const showDay = !prev || chatDayKey(prev.at) !== day;
+              const mine = msg.direction === "sent";
               return (
                 <div key={msg.id}>
                   {showDay ? (
@@ -438,11 +497,16 @@ export function ChatView() {
                       onJump={jumpToDay}
                     />
                   ) : null}
+                  <div
+                    className={`dm-msg-wrap${mine ? " is-mine" : " is-theirs"}`}
+                  >
                   <ChatMessage
                     msg={msg}
                     you={me}
                     peer={peer}
+                    isGroup={isGroup}
                     isAdmin={
+                      isGroup &&
                       msg.kind !== "system" &&
                       ownerHandle ===
                         (msg.direction === "sent"
@@ -460,7 +524,13 @@ export function ChatView() {
                           ) ?? null)
                         : null
                     }
-                    highlighted={hitId === msg.id}
+                    highlighted={
+                      hitId === msg.id ||
+                      (chatQuery.trim().length >= 2 &&
+                        (msg.body || "")
+                          .toLowerCase()
+                          .includes(chatQuery.trim().toLowerCase()))
+                    }
                     connected={connected}
                     canInvite={canInvite}
                     onAddPeople={() => setInviteOpen(true)}
@@ -476,6 +546,7 @@ export function ChatView() {
                       node?.scrollIntoView({ block: "center" });
                     }}
                   />
+                  </div>
                 </div>
               );
             })}
@@ -505,13 +576,18 @@ export function ChatView() {
               ))}
             </div>
           ) : null}
+          {peerBlocked ? (
+            <p className="dm-blocked-note" role="status">
+              You blocked this person. You can still read this chat.
+            </p>
+          ) : null}
           <ChatInput
             value={composer}
             onChange={setComposer}
             onSubmit={send}
             onTyping={notifyTyping}
-            disabled={!active}
-            placeholder={`Message ${title || "chat"}`}
+            disabled={!active || peerBlocked}
+            placeholder={`Message ${headerTitle || "chat"}`}
             replyLabel={
               replyTo
                 ? (replyTo.fileName || replyTo.body)

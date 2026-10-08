@@ -1,5 +1,6 @@
 import { isLocalOnlySystemNotice } from "./chatService";
 import {
+  formatBubbleTime,
   NODE_GREETING,
   P2P_ENCLAVE_BODY,
   P2P_ENCLAVE_TITLE,
@@ -42,6 +43,7 @@ export function ChatMessage({
   you,
   peer,
   isAdmin = false,
+  isGroup = false,
 }: {
   msg: DmMessage;
   quoted?: DmMessage | null;
@@ -54,6 +56,7 @@ export function ChatMessage({
   you: ChatPerson;
   peer: ChatPerson;
   isAdmin?: boolean;
+  isGroup?: boolean;
 }) {
   const system = isLocalOnlySystemNotice(msg);
   const mine = msg.direction === "sent";
@@ -76,14 +79,11 @@ export function ChatMessage({
   ) : (
     msg.body
   );
+  void connected;
   const status =
     msg.relay === "pending-keys"
       ? "Waiting for recipient to initialize security keys"
-      : msg.relay === "mailbox"
-        ? "Encrypted in mailbox"
-        : msg.relay === "purged" || connected
-          ? "Delivered · peer to peer"
-          : "Encrypted · pending peer";
+      : null;
 
   if (system) {
     const title = msg.title?.trim() || P2P_ENCLAVE_TITLE;
@@ -105,23 +105,23 @@ export function ChatMessage({
   return (
     <article
       data-msg-id={msg.id}
-      className={`dm-bubble-row${mine ? " is-mine" : " is-theirs"}${highlighted ? " is-search-hit is-target" : ""}`}
+      className={`dm-bubble-row${mine ? " is-mine" : " is-theirs"}${highlighted ? " is-search-hit is-target" : ""}${isGroup ? "" : " is-direct"}`}
     >
-      {mine ? null : (
+      {!mine && isGroup ? (
         <UserAvatar
           username={who.display || who.handle}
           url={who.avatar}
           className="dm-bubble-avatar"
           initialsLength={2}
         />
-      )}
+      ) : null}
       <div className="dm-bubble-col">
-        {mine ? null : (
+        {!mine && isGroup ? (
           <span className="dm-bubble-name">
             {who.display}
             {isAdmin ? <span className="newsfeed-author-badge">ADMIN</span> : null}
           </span>
-        )}
+        ) : null}
         {quoteId && quoteText ? (
           <button
             type="button"
@@ -135,8 +135,13 @@ export function ChatMessage({
         ) : null}
         <div className={`dm-bubble${mine ? " is-sent" : " is-received"}`}>
           <p>{body}</p>
+          {!isGroup ? (
+            <time className="dm-bubble-time" dateTime={new Date(msg.at).toISOString()}>
+              {formatBubbleTime(msg.at)}
+            </time>
+          ) : null}
         </div>
-        {mine ? <span className="dm-bubble-status">{status}</span> : null}
+        {mine && status ? <span className="dm-bubble-status">{status}</span> : null}
         <button
           type="button"
           className="newsfeed-reply-btn"

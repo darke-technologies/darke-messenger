@@ -185,6 +185,7 @@ export function DmProvider({
   const [roomReady, setRoomReady] = useState(false);
   const threadsRef = useRef(threads);
   threadsRef.current = threads;
+  const sendingIdsRef = useRef(new Set<string>());
   const workspaces = useWorkspacesMaybe();
   const pro = isProPlan(workspaces?.tier ?? "free");
 
@@ -674,11 +675,15 @@ export function DmProvider({
         ),
       );
       if (!opts?.mailbox || guest) return;
+      sendingIdsRef.current.add(localId);
       const recipient =
         (thread ? sidebarPeerHandle(thread, slug) : null) ||
         thread?.peerUsername ||
         peerUsernameFromHandle(thread?.handle ?? "");
-      if (!recipient || !thread) return;
+      if (!recipient || !thread) {
+        sendingIdsRef.current.delete(localId);
+        return;
+      }
       const queued = file
         ? await queueMailboxFile({
             sender: slug,
@@ -713,6 +718,7 @@ export function DmProvider({
               : row,
           ),
         );
+        sendingIdsRef.current.delete(localId);
         return;
       }
       setThreads((rows) =>
@@ -729,6 +735,7 @@ export function DmProvider({
             : row,
         ),
       );
+      sendingIdsRef.current.delete(localId);
     },
     [activeId, guest, slug],
   );
@@ -790,7 +797,11 @@ export function DmProvider({
               !threadIsGroup(row) && sidebarPeerHandle(row, slug) === sender,
           );
         if (existing) {
-          if (existing.messages.some((msg) => msg.pendingId === item.id)) {
+          if (
+            next.some((row) =>
+              row.messages.some((msg) => msg.pendingId === item.id),
+            )
+          ) {
             continue;
           }
           const activeHere = existing.id === activeId;
@@ -881,6 +892,8 @@ export function DmProvider({
         for (const msg of thread.messages) {
           if (cancelled) return;
           if (msg.direction !== "sent" || msg.relay !== "pending-keys") continue;
+          if (sendingIdsRef.current.has(msg.id)) continue;
+          if (Date.now() - msg.at < 4000) continue;
           if (inflight.has(msg.id)) continue;
           inflight.add(msg.id);
           try {
@@ -905,7 +918,10 @@ export function DmProvider({
                     sessionKey: thread.sessionKey,
                     body: msg.body,
                   });
-            if (cancelled || !queued.ok) continue;
+            if (cancelled || !queued.ok) {
+              inflight.delete(msg.id);
+              continue;
+            }
             setThreads((rows) =>
               rows.map((row) =>
                 row.id === thread.id
@@ -925,14 +941,11 @@ export function DmProvider({
               ),
             );
           } catch {
-            /* keep waiting for X3DH bundle */
-          } finally {
             inflight.delete(msg.id);
           }
         }
       }
     }
-    void flush();
     const timer = window.setInterval(() => void flush(), 5000);
     return () => {
       cancelled = true;
