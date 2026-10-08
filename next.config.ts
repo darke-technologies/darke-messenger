@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   // Locked `.next/trace` on Windows (EPERM) kills `next dev` and leaves :3000 blank.
   distDir: ".next-dev",
   outputFileTracingRoot: projectRoot,
+  transpilePackages: [
+    "@wppconnect/libsignal-protocol",
+    "@wppconnect/curve25519",
+  ],
   serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node"],
   turbopack: {
     resolveAlias: {

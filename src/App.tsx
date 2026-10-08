@@ -17,6 +17,7 @@ import { LandingPage } from "./LandingPage";
 import { LoginPage } from "./LoginPage";
 import { PricingPage } from "./PricingPage";
 import { ManualPane } from "./ManualPane";
+import { bootstrapSignalProtocol } from "./lib/crypto/signal";
 import { loadMyProfile } from "./profile";
 import { sessionPublicUsername, supabase, supabaseConfigured } from "./supabase";
 import {
@@ -215,6 +216,7 @@ function AppBody({ initialPath }: { initialPath: string }) {
         }
         resetSessionCaches();
         await hydrateThemeFromVault().catch(() => null);
+        await bootstrapSignalProtocol().catch(() => null);
         const profile = await loadMyProfile().catch(() => null);
         if (profile?.darke_id) {
           setIdentity({
@@ -382,6 +384,7 @@ function AppBody({ initialPath }: { initialPath: string }) {
         onReady={(slug) => {
           resetSessionCaches();
           void hydrateThemeFromVault().catch(() => null);
+          void bootstrapSignalProtocol().catch(() => null);
           if (typeof window !== "undefined") {
             const path = window.location.pathname;
             captureJoinIntent();

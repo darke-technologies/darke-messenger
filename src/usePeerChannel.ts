@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PeerConnectionState } from "./dmSessions";
 import {
+  unwrapTextPayload,
+  wrapTextPayload,
+} from "./lib/crypto/signal";
+import {
   encodeChat,
   encodeTyping,
   isTypingFrame,
@@ -29,12 +33,18 @@ export type PeerChannel = {
 export function usePeerChannel(
   sessionKey: string | null,
   peerState: PeerConnectionState,
+  peerUsername?: string | null,
 ): PeerChannel {
   const [connectionState, setConnectionState] =
     useState<PeerConnectionState>(peerState);
   const connectedRef = useRef(peerState === "CONNECTED");
+  const peerRef = useRef((peerUsername ?? "").trim().toLowerCase());
   const messageHandlers = useRef(new Set<(payload: string) => void>());
   const typingHandlers = useRef(new Set<(frame: TypingFrame) => void>());
+
+  useEffect(() => {
+    peerRef.current = (peerUsername ?? "").trim().toLowerCase();
+  }, [peerUsername]);
 
   useEffect(() => {
     setConnectionState(peerState);
@@ -58,13 +68,21 @@ export function usePeerChannel(
     }
     const body = frame?.type === "MESSAGE" ? frame.body : raw;
     if (!body) return;
-    messageHandlers.current.forEach((handler) => handler(body));
+    const peer = peerRef.current;
+    void (async () => {
+      const plain = peer ? await unwrapTextPayload(peer, body) : body;
+      messageHandlers.current.forEach((handler) => handler(plain));
+    })();
   }, []);
 
   const sendMessage = useCallback(
     (payload: string, replyToMessageId?: string) => {
       if (!payload) return;
-      transmit(encodeChat(payload, replyToMessageId));
+      const peer = peerRef.current;
+      void (async () => {
+        const wrapped = peer ? await wrapTextPayload(peer, payload) : payload;
+        transmit(encodeChat(wrapped, replyToMessageId));
+      })();
     },
     [transmit],
   );

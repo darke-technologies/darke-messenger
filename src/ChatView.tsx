@@ -64,6 +64,10 @@ export function ChatView() {
   const channel = usePeerChannel(
     active?.sessionKey ?? null,
     active?.connectionState ?? "WAITING FOR PEER",
+    (active?.peerUsername || active?.handle || "")
+      .replace(/^@/, "")
+      .trim()
+      .toLowerCase() || null,
   );
   const live = channel.connectionState;
   const connected = live === "CONNECTED";
@@ -251,10 +255,22 @@ export function ChatView() {
     `${active?.sessionKey ?? ""}:peer:${active?.handle ?? "peer"}`,
   );
   const ownerHandle = chatOwnerHandle(active, slug);
-  const visibleMessages = (nodeTyping
-    ? (active?.messages.filter((msg) => !isNodeGreeting(msg)) ?? [])
-    : (active?.messages ?? [])
-  ).filter((msg) => !active || !messageHasDisappeared(msg, active));
+  const visibleMessages = (active?.messages ?? []).filter(
+    (msg) => !active || !messageHasDisappeared(msg, active),
+  );
+  const userMessageCount = visibleMessages.filter(
+    (msg) => !isNodeGreeting(msg),
+  ).length;
+  const showIceNudge = Boolean(active && canInvite && userMessageCount === 0);
+  const iceChips = !showIceNudge
+    ? []
+    : threadIsGroup(active)
+      ? ["👋 Welcome everyone!", "🚀 Group set up and ready to go."]
+      : [
+          "⚡ Hey! DARKE is better than Signal. Let's chat here.",
+          "👋 Hey!",
+          "💬 What's up?",
+        ];
   const dayOptions = useMemo(() => {
     const seen = new Set<string>();
     const rows: { key: string; label: string }[] = [];
@@ -422,6 +438,29 @@ export function ChatView() {
           </div>
 
           <TypingBar handles={typingUsers} />
+          {showIceNudge ? (
+            <p className="dm-ice-nudge" role="status">
+              💡 Break the ice! Send the first message so your peer or team
+              isn&apos;t greeting an empty room.
+            </p>
+          ) : null}
+          {iceChips.length > 0 ? (
+            <div className="dm-ice-chips" role="group" aria-label="Quick first messages">
+              {iceChips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="dm-ice-chip"
+                  onClick={() => {
+                    setComposer(chip);
+                    requestAnimationFrame(() => areaRef.current?.focus());
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <ChatInput
             value={composer}
             onChange={setComposer}

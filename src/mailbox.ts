@@ -1,4 +1,5 @@
 import { getLivePrivateKey } from "./darkeKeys";
+import { unwrapTextPayload, wrapTextPayload } from "./lib/crypto/signal";
 import { loadProfileByUsername } from "./profile";
 import { toSlug } from "./slug";
 import { supabase } from "./supabase";
@@ -177,11 +178,12 @@ export async function queueMailboxMessage(opts: {
 }): Promise<string | null> {
   const pub = await loadRecipientPublicKey(opts.recipient);
   if (!pub) return null;
+  const cipherBody = await wrapTextPayload(opts.recipient, opts.body);
   const plain: MailboxPlain = {
     v: 1,
     sessionKey: opts.sessionKey,
     kind: "text",
-    body: opts.body,
+    body: cipherBody,
   };
   const seal = await sealBytes(
     new TextEncoder().encode(JSON.stringify(plain)),
@@ -323,15 +325,16 @@ export async function fetchAndPurgeMailbox(
           fileSize = blob.size;
         }
       }
+      const openedBody =
+        meta.kind === "file"
+          ? meta.fileName || "Encrypted file"
+          : await unwrapTextPayload(row.sender_username, meta.body || "");
       out.push({
         id: row.id,
         sender: row.sender_username,
         sessionKey: meta.sessionKey,
         kind: meta.kind,
-        body:
-          meta.kind === "file"
-            ? meta.fileName || "Encrypted file"
-            : meta.body || "",
+        body: openedBody,
         fileName: meta.fileName,
         fileUrl,
         fileSize,

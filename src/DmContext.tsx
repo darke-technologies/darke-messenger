@@ -37,6 +37,7 @@ import {
   type DmThread,
   showCopyLinkToast,
 } from "./dmSessions";
+import { bootstrapSignalProtocol } from "./lib/crypto/signal";
 import {
   fetchAndPurgeMailbox,
   listSentMailboxIds,
@@ -180,6 +181,7 @@ export function DmProvider({
   const pro = isProPlan(workspaces?.tier ?? "free");
 
   useEffect(() => {
+    if (!guest) void bootstrapSignalProtocol().catch(() => null);
     setThreads(migrateChatThreads(slug, loadThreads(slug)));
     setActiveId(null);
     setDraft(null);
@@ -192,7 +194,7 @@ export function DmProvider({
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, guest]);
 
   useEffect(() => {
     saveThreads(slug, threads);

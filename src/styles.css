@@ -23339,6 +23339,68 @@ h3.chat-settings-label {
   margin-bottom: 2px;
 }
 
+.p2p-enclave-card {
+  width: min(560px, 100%);
+  margin: 8px auto 16px 0;
+  padding: 14px 16px 16px;
+  border: 1px solid #27272a;
+  border-radius: 14px;
+  background: #18181b;
+  color: #d4d4d8;
+}
+
+.p2p-enclave-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.p2p-enclave-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #a1a1aa;
+}
+
+.dm-ice-nudge {
+  width: min(720px, calc(100% - 32px));
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dm-ice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: min(720px, calc(100% - 32px));
+  margin: 0 auto 8px;
+}
+
+.dm-ice-chip {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #27272a;
+  border-radius: 999px;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transform: none !important;
+  outline: none !important;
+}
+
+.dm-ice-chip:hover {
+  background: #27272a;
+}
+
 .dm-day-rule {
   display: flex;
   flex-direction: row;

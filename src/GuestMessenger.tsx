@@ -86,6 +86,10 @@ function GuestChatPane({ host }: { host: boolean }) {
   const channel = usePeerChannel(
     active?.sessionKey ?? null,
     active?.connectionState ?? "WAITING FOR PEER",
+    (active?.peerUsername || active?.handle || "")
+      .replace(/^@/, "")
+      .trim()
+      .toLowerCase() || null,
   );
   const [composer, setComposer] = useState("");
   const streamRef = useRef<HTMLDivElement>(null);
