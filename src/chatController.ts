@@ -137,11 +137,11 @@ export function addMembersToChat(
     existing.add(handle);
   }
   if (accepted.length === 0) return thread;
-  let guests = thread.chatGuests ?? thread.invitedHandles;
+  let guests = upsertChatGuest(thread.chatGuests ?? thread.invitedHandles, "");
   for (const handle of accepted) {
     guests = upsertChatGuest(guests, handle, "handle");
   }
-  const rows = Array.isArray(guests) ? guests : [];
+  const rows = guests;
   const first = rows[0]?.handle;
   return {
     ...thread,

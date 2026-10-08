@@ -35,6 +35,7 @@ import {
   type ChatFocusDetail,
   type DmMessage,
   type DmThread,
+  type RoomKind,
   showCopyLinkToast,
 } from "./dmSessions";
 import { bootstrapSignalProtocol } from "./lib/crypto/signal";
@@ -54,7 +55,6 @@ import {
 import {
   migrateChatThreads,
   nextChatSeq,
-  upsertChatGuest,
   createEmptyUntitledThread,
   isFounderThread,
   isChatOwner,
@@ -97,6 +97,8 @@ function syncChatUrl(thread: Pick<DmThread, "sessionKey" | "roomKind">): void {
   if (now === next) return;
   window.history.replaceState(null, "", next);
 }
+
+type Draft = { sessionKey: string; shareLink: string };
 
 function makeDraft(): Draft {
   const sessionKey = generateSessionKey();
@@ -581,10 +583,11 @@ export function DmProvider({
     const existing = threadsRef.current.find((row) => row.sessionKey === key);
     const target = existing ?? findStoredThreadBySessionKey(key);
 
+    const sessionKey = key;
     function commitJoin() {
       setJoinError(null);
       setThreads((rows) => {
-        const found = rows.find((item) => item.sessionKey === key);
+        const found = rows.find((item) => item.sessionKey === sessionKey);
         if (found) {
           setActiveId(found.id);
           return rows.map((row) =>
@@ -594,7 +597,7 @@ export function DmProvider({
           );
         }
         const thread = newThread(
-          key,
+          sessionKey,
           true,
           undefined,
           undefined,

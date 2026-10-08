@@ -28,7 +28,6 @@ import {
   tryAddTeamMember,
   type DarkeTeam,
   type DarkeTeamActivity,
-  type TeamMemberRole,
   FREE_TEAM_SEATS,
 } from "./teamContainer";
 import { isProPlan } from "./workspaces";
@@ -168,7 +167,7 @@ export function TeamCommandCenter({
   }
 
   async function onAvatarFile(file: File | undefined) {
-    if (!file || !manage) return;
+    if (!file || !manage || !team) return;
     try {
       const url = await encodeImageFile(file, 320, 180_000);
       patchTeam(slug, team.id, { avatarUrl: url });
@@ -181,14 +180,14 @@ export function TeamCommandCenter({
 
   function saveName() {
     const next = name.trim();
-    if (!next || !manage) return;
+    if (!next || !manage || !team) return;
     patchTeam(slug, team.id, { name: next });
     setNote("Display name saved.");
     refresh();
   }
 
   function requestSlugSave() {
-    if (!manage) return;
+    if (!manage || !team) return;
     const next = slugifyTeamName(slugDraft);
     setSlugDraft(next);
     if (!isValidTeamSlug(next)) {
@@ -204,7 +203,7 @@ export function TeamCommandCenter({
 
   function confirmSlugSave() {
     const next = slugModal;
-    if (!next || !manage) return;
+    if (!next || !manage || !team) return;
     const result = changeTeamSlug(slug, team.id, next);
     setSlugModal(null);
     if (!result.ok || !result.team) {
@@ -218,6 +217,7 @@ export function TeamCommandCenter({
   }
 
   function addPerson(handle: string) {
+    if (!team) return;
     const result = tryAddTeamMember(slug, handle, pro, team.id);
     if (result.blocked) {
       openUpgradeModal("team");
@@ -242,7 +242,7 @@ export function TeamCommandCenter({
   }
 
   function applyInviteRules() {
-    if (!manage) return;
+    if (!manage || !team) return;
     const hours = Number(expireHours);
     const uses = Number(maxUses);
     patchTeam(slug, team.id, {
@@ -262,6 +262,7 @@ export function TeamCommandCenter({
   }
 
   function memberStatus(handle: string): "online" | "offline" {
+    if (!team) return "offline";
     const hit = threads.some(
       (row) =>
         (row.teamId === team.id || team.chatIds.includes(row.id)) &&
@@ -277,6 +278,7 @@ export function TeamCommandCenter({
   }
 
   function openUpgrade() {
+    if (!team) return;
     logTeamEvent(slug, team.id, "Opened Premium seat upgrade.");
     openPricingPage();
   }
@@ -905,10 +907,10 @@ export function TeamCommandCenter({
 }
 
 function MembersTable({
-  team,
+  team: _team,
   shownMembers,
   people,
-  slug,
+  slug: _slug,
   manage,
   memberStatus,
   memberMenu,

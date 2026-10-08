@@ -1,7 +1,7 @@
 import { InviteModal } from "./InviteModal";
 
 export function TopNav({
-  onInvite,
+  onInvite: _onInvite,
   inviteOpen,
   shareLink,
   copied,
