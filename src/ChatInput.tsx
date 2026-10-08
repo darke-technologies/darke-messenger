@@ -1,9 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useRef } from "react";
 import { IconArrowUp, IconPaperclip } from "./icons";
 import { COMMENT_MAX } from "./status";
-import { startLocalVoiceCapture, type VoiceCapture } from "./voiceService";
 
 export function ChatInput({
   value,
@@ -29,56 +28,12 @@ export function ChatInput({
   areaRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const captureRef = useRef<VoiceCapture | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-
-  useEffect(() => {
-    return () => captureRef.current?.cancel();
-  }, []);
 
   function grow() {
     const el = areaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }
-
-  function appendTranscript(text: string) {
-    if (!text) return;
-    const prefix = value.trim();
-    const next = prefix ? `${prefix} ${text}` : text;
-    onChange(next.slice(0, COMMENT_MAX));
-    requestAnimationFrame(grow);
-  }
-// @ts-ignore
-  async function toggleMic() {
-    if (disabled || busy) return;
-    setVoiceError(null);
-    if (recording && captureRef.current) {
-      setRecording(false);
-      setBusy(true);
-      try {
-        const text = await captureRef.current.stop();
-        captureRef.current = null;
-        appendTranscript(text);
-      } catch (err) {
-        setVoiceError(
-          err instanceof Error ? err.message : "On-device transcription failed.",
-        );
-        captureRef.current = null;
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    try {
-      captureRef.current = await startLocalVoiceCapture();
-      setRecording(true);
-    } catch {
-      setVoiceError("Microphone permission is required for on-device dictation.");
-    }
   }
 
   return (
@@ -90,11 +45,6 @@ export function ChatInput({
             Cancel
           </button>
         </div>
-      ) : null}
-      {voiceError ? (
-        <p className="dm-voice-error" role="status">
-          {voiceError}
-        </p>
       ) : null}
       <div className="dm-chat-console-row">
         <button
@@ -122,13 +72,7 @@ export function ChatInput({
           value={value}
           maxLength={COMMENT_MAX}
           disabled={disabled}
-          placeholder={
-            recording
-              ? "Listening on this device…"
-              : busy
-                ? "Transcribing on this device…"
-                : placeholder || "Enter message..."
-          }
+          placeholder={placeholder || "Enter message..."}
           aria-label="Encrypted message"
           onChange={(e) => {
             onChange(e.target.value.slice(0, COMMENT_MAX));

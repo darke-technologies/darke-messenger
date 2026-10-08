@@ -14,11 +14,9 @@ const nextConfig: NextConfig = {
     "@wppconnect/libsignal-protocol",
     "@wppconnect/curve25519",
   ],
-  serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node"],
   turbopack: {
     resolveAlias: {
       sharp: "./src/shims/empty.ts",
-      "onnxruntime-node": "./src/shims/empty.ts",
     },
   },
   webpack: (config) => {
@@ -32,7 +30,6 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       sharp$: false,
-      "onnxruntime-node$": false,
     };
     config.resolve.fallback = {
       ...config.resolve.fallback,

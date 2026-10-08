@@ -9,7 +9,6 @@
     "start": "next start"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.3.0",
     "@noble/hashes": "^2.4.0",
     "@supabase/supabase-js": "^2.57.4",
     "@wppconnect/libsignal-protocol": "github:wppconnect-team/libsignal-protocol",
@@ -18,7 +17,6 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^20.17.6",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

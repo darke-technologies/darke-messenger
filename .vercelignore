@@ -1,7 +1,0 @@
-node_modules
-.next
-dist
-out
-src-tauri/target/
-src-tauri/target-focus/
-.git
