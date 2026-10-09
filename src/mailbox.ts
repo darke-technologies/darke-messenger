@@ -22,6 +22,7 @@ export type MailboxPlain = {
   mime?: string;
   messageId?: string;
   pinned?: boolean;
+  pinUntil?: number | null;
 };
 
 export type MailboxEnqueue =
@@ -62,6 +63,8 @@ function parseInner(raw: string): MailboxPlain | null {
       messageId:
         typeof parsed.messageId === "string" ? parsed.messageId : undefined,
       pinned: parsed.pinned === true,
+      pinUntil:
+        typeof parsed.pinUntil === "number" ? parsed.pinUntil : parsed.pinUntil === null ? null : undefined,
     };
   } catch {
     return null;
@@ -159,6 +162,7 @@ export async function queueMailboxControl(opts: {
   messageId: string;
   body?: string;
   pinned?: boolean;
+  pinUntil?: number | null;
 }): Promise<MailboxEnqueue> {
   const secrets = [opts.messageId, opts.body ?? ""].filter((s) => s.length >= 8);
   const packed = await wrapMailboxInner(
@@ -170,6 +174,7 @@ export async function queueMailboxControl(opts: {
       messageId: opts.messageId,
       body: opts.body,
       pinned: opts.pinned,
+      pinUntil: opts.pinUntil,
     },
     secrets,
   );
@@ -268,6 +273,7 @@ export type FetchedMailbox = {
   at: number;
   messageId?: string;
   pinned?: boolean;
+  pinUntil?: number | null;
 };
 
 const claimedMailboxIds = new Set<string>();
@@ -341,6 +347,7 @@ async function loadAndPurgeMailbox(
         at: Date.parse(row.created_at) || Date.now(),
         messageId: meta.messageId,
         pinned: meta.pinned,
+        pinUntil: meta.pinUntil,
       });
       await purgeRow(row);
     } catch {

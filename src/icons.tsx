@@ -556,6 +556,14 @@ export function IconPin({ className }: IconProps) {
   );
 }
 
+export function IconSparkle({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M12 3.2 13.7 10 20.8 12 13.7 14 12 20.8 10.3 14 3.2 12 10.3 10 12 3.2Z" />
+    </Svg>
+  );
+}
+
 /** Lucide Send (paper plane). */
 export function IconSend({ className }: IconProps) {
   return (

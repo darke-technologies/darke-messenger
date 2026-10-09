@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { isLocalOnlySystemNotice } from "./chatService";
 import {
   formatBubbleTime,
@@ -16,6 +17,7 @@ import {
   IconSelect,
   IconTrash,
 } from "./icons";
+import { memberDisplayName } from "./getChatTitle";
 import { UserAvatar } from "./UserAvatar";
 
 function ReplyIcon() {
@@ -95,6 +97,9 @@ export function ChatMessage({
 }) {
   const system = isLocalOnlySystemNotice(msg);
   const mine = msg.direction === "sent";
+  function handleOf(value: string) {
+    return value.replace(/^@/, "").trim().toLowerCase();
+  }
   const who = system
     ? { handle: "darke", display: "DARKE Node", avatar: "/darke.png" }
     : mine
@@ -121,16 +126,69 @@ export function ChatMessage({
       : null;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
+    null,
+  );
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuListRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     function close(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+      const node = event.target as Node;
+      if (menuRef.current?.contains(node)) return;
+      if (menuListRef.current?.contains(node)) return;
+      setMenuOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
     }
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPos(null);
+      return;
+    }
+    const GAP = 8;
+    const PAD = 8;
+    function place() {
+      const btn = menuRef.current?.querySelector("button");
+      const menu = menuListRef.current;
+      if (!btn || !menu) return;
+      const r = btn.getBoundingClientRect();
+      const mw = menu.offsetWidth;
+      const mh = menu.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const spaceAbove = r.top - PAD;
+      const spaceBelow = vh - r.bottom - PAD;
+      let top: number;
+      if (mh + GAP <= spaceAbove || spaceAbove >= spaceBelow) {
+        top = r.top - mh - GAP;
+        if (top < PAD) top = PAD;
+      } else {
+        top = r.bottom + GAP;
+        if (top + mh > vh - PAD) top = Math.max(PAD, vh - PAD - mh);
+      }
+      let left = mine ? r.left : r.right - mw;
+      left = Math.min(Math.max(PAD, left), Math.max(PAD, vw - PAD - mw));
+      setMenuPos({ top, left });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [menuOpen, mine]);
 
   const replyBtn = (
     <button
@@ -144,7 +202,7 @@ export function ChatMessage({
   );
 
   const menuBtn = (
-    <div className="dm-msg-more" ref={menuRef}>
+    <div className={`dm-msg-more${menuOpen ? " is-open" : ""}`} ref={menuRef}>
       <button
         type="button"
         className="dm-msg-more-btn"
@@ -155,93 +213,136 @@ export function ChatMessage({
       >
         <IconMoreHorizontal />
       </button>
-      {menuOpen ? (
-        <ul className="dm-msg-menu" role="menu">
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onForward?.(msg);
-              }}
+      {menuOpen && typeof document !== "undefined"
+        ? createPortal(
+            <ul
+              ref={menuListRef}
+              className="dm-msg-menu is-portaled"
+              role="menu"
+              style={
+                menuPos
+                  ? { top: menuPos.top, left: menuPos.left }
+                  : { visibility: "hidden" }
+              }
             >
-              <IconShareForward />
-              Forward
-            </button>
-          </li>
-          {mine ? (
-            <li>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onEdit?.(msg);
-                }}
-              >
-                <IconEdit />
-                Edit
-              </button>
-            </li>
-          ) : null}
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onSelect?.(msg);
-              }}
-            >
-              <IconSelect />
-              Select
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onCopy?.(msg);
-              }}
-            >
-              <IconCopy />
-              Copy text
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onPin?.(msg);
-              }}
-            >
-              <IconPin />
-              {msg.pinned ? "Unpin" : "Pin"}
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              className="is-danger"
-              onClick={() => {
-                setMenuOpen(false);
-                onDelete?.(msg);
-              }}
-            >
-              <IconTrash />
-              Delete
-            </button>
-          </li>
-        </ul>
-      ) : null}
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onForward?.(msg);
+                  }}
+                >
+                  <IconShareForward />
+                  Forward
+                </button>
+              </li>
+              {mine ? (
+                <li>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onEdit?.(msg);
+                    }}
+                  >
+                    <IconEdit />
+                    Edit
+                  </button>
+                </li>
+              ) : null}
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSelect?.(msg);
+                  }}
+                >
+                  <IconSelect />
+                  Select
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onCopy?.(msg);
+                  }}
+                >
+                  <IconCopy />
+                  Copy text
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onPin?.(msg);
+                  }}
+                >
+                  <IconPin />
+                  {msg.pinned ? "Unpin" : "Pin"}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="is-danger"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete?.(msg);
+                  }}
+                >
+                  <IconTrash />
+                  Delete
+                </button>
+              </li>
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
   );
+
+  if (msg.kind === "pin-notice") {
+    const by = handleOf(msg.pinnedBy || "");
+    const self = handleOf(you.handle);
+    const peerId = handleOf(peer.handle);
+    const who =
+      !by || by === self
+        ? "You"
+        : by === peerId
+          ? peer.display || peer.handle
+          : memberDisplayName(msg.pinnedBy || "") || msg.pinnedBy || "Someone";
+    return (
+      <div className="dm-pin-notice" data-msg-id={msg.id}>
+        <p className="dm-pin-notice-line">
+          <IconPin className="dm-pin-notice-icon" />
+          <span>
+            {who} pinned a message
+          </span>
+        </p>
+        <button
+          type="button"
+          className="dm-pin-notice-go"
+          onClick={() => {
+            if (msg.pinTargetId) onOpenQuote?.(msg.pinTargetId);
+          }}
+        >
+          Go to message
+        </button>
+      </div>
+    );
+  }
 
   if (system) {
     const title = msg.title?.trim() || P2P_ENCLAVE_TITLE;

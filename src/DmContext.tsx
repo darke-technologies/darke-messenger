@@ -32,6 +32,7 @@ import {
   teamChatSessionKey,
   writeLastActiveChatId,
   nodeGreetingMessage,
+  makePinNotice,
   type ChatFocusDetail,
   type DmMessage,
   type DmThread,
@@ -147,7 +148,11 @@ type DmContextValue = {
   ) => Promise<void>;
   editMessage: (messageId: string, body: string) => Promise<void>;
   deleteMessages: (messageIds: string[]) => Promise<void>;
-  pinMessage: (messageId: string, pinned?: boolean) => Promise<void>;
+  pinMessage: (
+    messageId: string,
+    pinned?: boolean,
+    until?: number | null,
+  ) => Promise<void>;
   forwardMessages: (messageIds: string[], threadIds: string[]) => Promise<void>;
   receivePeerChat: (
     body: string,
@@ -822,6 +827,12 @@ export function DmProvider({
                 pinnedMessageId: ids.includes(row.pinnedMessageId ?? "")
                   ? null
                   : row.pinnedMessageId,
+                pinnedBy: ids.includes(row.pinnedMessageId ?? "")
+                  ? null
+                  : row.pinnedBy,
+                pinnedUntil: ids.includes(row.pinnedMessageId ?? "")
+                  ? null
+                  : row.pinnedUntil,
               }
             : row,
         ),
@@ -845,23 +856,30 @@ export function DmProvider({
   );
 
   const pinMessage = useCallback(
-    async (messageId: string, pinned = true) => {
+    async (messageId: string, pinned = true, until: number | null = null) => {
       if (!activeId) return;
       const thread = threadsRef.current.find((row) => row.id === activeId);
       if (!thread) return;
+      const who = slug.replace(/^@/, "").trim().toLowerCase();
       setThreads((rows) =>
-        rows.map((row) =>
-          row.id === activeId
-            ? {
-                ...row,
-                pinnedMessageId: pinned ? messageId : null,
-                messages: row.messages.map((msg) => ({
-                  ...msg,
-                  pinned: pinned ? msg.id === messageId : false,
-                })),
-              }
-            : row,
-        ),
+        rows.map((row) => {
+          if (row.id !== activeId) return row;
+          const next: DmThread = {
+            ...row,
+            pinnedMessageId: pinned ? messageId : null,
+            pinnedBy: pinned ? who : null,
+            pinnedUntil: pinned ? until : null,
+            messages: row.messages.map((msg) => ({
+              ...msg,
+              pinned: pinned ? msg.id === messageId : false,
+            })),
+          };
+          if (!pinned) return next;
+          return {
+            ...next,
+            messages: [...next.messages, makePinNotice({ messageId, by: who })],
+          };
+        }),
       );
       if (guest) return;
       await Promise.all(
@@ -873,6 +891,7 @@ export function DmProvider({
             kind: "pin",
             messageId,
             pinned,
+            pinUntil: pinned ? until : null,
           }).catch(() => null),
         ),
       );
@@ -954,17 +973,38 @@ export function DmProvider({
                   row.pinnedMessageId === item.messageId
                     ? null
                     : row.pinnedMessageId,
+                pinnedBy:
+                  row.pinnedMessageId === item.messageId ? null : row.pinnedBy,
+                pinnedUntil:
+                  row.pinnedMessageId === item.messageId
+                    ? null
+                    : row.pinnedUntil,
               };
             }
             if (item.kind === "pin") {
               const on = item.pinned !== false;
-              return {
+              const by = sender;
+              const next: DmThread = {
                 ...row,
                 pinnedMessageId: on ? item.messageId : null,
+                pinnedBy: on ? by : null,
+                pinnedUntil: on ? item.pinUntil ?? null : null,
                 messages: row.messages.map((msg) => ({
                   ...msg,
                   pinned: on && msg.id === item.messageId,
                 })),
+              };
+              if (!on || !item.messageId) return next;
+              return {
+                ...next,
+                messages: [
+                  ...next.messages,
+                  makePinNotice({
+                    messageId: item.messageId,
+                    by,
+                    at: item.at,
+                  }),
+                ],
               };
             }
             return {

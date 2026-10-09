@@ -42,13 +42,15 @@ export type DmMessage = {
   fileSize?: number;
   replyToMessageId?: string;
   replyToSnippet?: string;
-  kind?: "user" | "system";
+  kind?: "user" | "system" | "pin-notice";
   is_system?: boolean;
   is_ephemeral?: boolean;
   shareLink?: string;
   title?: string;
   edited?: boolean;
   pinned?: boolean;
+  pinTargetId?: string;
+  pinnedBy?: string;
 };
 
 export type RoomKind = "team" | "direct";
@@ -81,6 +83,8 @@ export type DmThread = {
   chatGuests?: ChatGuest[];
   pinned?: boolean;
   pinnedMessageId?: string | null;
+  pinnedBy?: string | null;
+  pinnedUntil?: number | null;
   unread?: number;
   kind?: "founder";
   isGroup?: boolean;
@@ -92,6 +96,39 @@ export type DmThread = {
   accentColor?: string | null;
   description?: string;
 };
+
+export type PinDuration = "24h" | "7d" | "30d" | "forever";
+
+export function pinUntilFromDuration(duration: PinDuration, from = Date.now()): number | null {
+  if (duration === "24h") return from + 24 * 60 * 60 * 1000;
+  if (duration === "7d") return from + 7 * 24 * 60 * 60 * 1000;
+  if (duration === "30d") return from + 30 * 24 * 60 * 60 * 1000;
+  return null;
+}
+
+export function threadPinIsLive(thread: Pick<DmThread, "pinnedMessageId" | "pinnedUntil">): boolean {
+  if (!thread.pinnedMessageId) return false;
+  if (thread.pinnedUntil && thread.pinnedUntil <= Date.now()) return false;
+  return true;
+}
+
+export function makePinNotice(opts: {
+  messageId: string;
+  by: string;
+  at?: number;
+}): DmMessage {
+  const at = opts.at ?? Date.now();
+  return {
+    id: `pin-notice-${opts.messageId}-${at}`,
+    direction: "received",
+    body: "pinned a message",
+    at,
+    e2ee: true,
+    kind: "pin-notice",
+    pinTargetId: opts.messageId,
+    pinnedBy: opts.by,
+  };
+}
 
 const SESSION_KEY_RE = /0x[0-9a-fA-F]{16,64}/;
 

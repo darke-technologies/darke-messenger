@@ -26,7 +26,9 @@ import {
 import {
   CHAT_FOCUS_EVENT,
   generateSessionKey,
+  pinUntilFromDuration,
   sessionShareLink,
+  threadPinIsLive,
   type ChatFocusDetail,
   type DmMessage,
 } from "./dmSessions";
@@ -45,7 +47,8 @@ import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
 import type { TeamMovePreview } from "./teamService";
 import { blockPeer, isPeerBlocked } from "./blockedPeers";
 import { ForwardModal } from "./ForwardModal";
-import { IconSearch } from "./icons";
+import { PinModal } from "./PinModal";
+import { IconSearch, IconSparkle } from "./icons";
 import { THEME_CHANGE } from "./theme";
 import {
   hasOpenSignalSession,
@@ -129,6 +132,7 @@ export function ChatView() {
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [forwardIds, setForwardIds] = useState<string[] | null>(null);
+  const [pinTarget, setPinTarget] = useState<DmMessage | null>(null);
   const [chatQuery, setChatQuery] = useState("");
   const [blockedTick, setBlockedTick] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
@@ -147,6 +151,7 @@ export function ChatView() {
     setSelecting(false);
     setSelectedIds([]);
     setForwardIds(null);
+    setPinTarget(null);
   }, [active?.id]);
 
   useEffect(() => {
@@ -398,7 +403,7 @@ export function ChatView() {
     (msg) => !active || !messageHasDisappeared(msg, active),
   );
   const userMessageCount = visibleMessages.filter(
-    (msg) => !isNodeGreeting(msg),
+    (msg) => !isNodeGreeting(msg) && msg.kind !== "pin-notice",
   ).length;
   const showIceNudge = Boolean(active && canInvite && userMessageCount === 0);
   const iceChips = !showIceNudge
@@ -429,6 +434,25 @@ export function ChatView() {
     );
     node?.scrollIntoView({ block: "start" });
   }
+
+  function jumpToMessage(id: string) {
+    setHitId(id);
+    const node = streamRef.current?.querySelector(
+      `[data-msg-id="${CSS.escape(id)}"]`,
+    );
+    node?.scrollIntoView({ block: "center" });
+  }
+
+  const livePin =
+    active && threadPinIsLive(active)
+      ? (active.messages.find((msg) => msg.id === active.pinnedMessageId) ??
+        null)
+      : null;
+  const livePinAuthor = livePin
+    ? livePin.direction === "sent"
+      ? me.display || me.handle
+      : peer.display || peer.handle
+    : "";
 
   if (viewTab === "settings" && active) {
     return (
@@ -497,6 +521,24 @@ export function ChatView() {
         }
       />
 
+      {livePin ? (
+        <button
+          type="button"
+          className="dm-pin-bar"
+          onClick={() => jumpToMessage(livePin.id)}
+        >
+          <span className="dm-pin-bar-copy">
+            <strong>{livePinAuthor}</strong>
+            <span>
+              {(livePin.fileName || livePin.body)
+                .replace(/\s+/g, " ")
+                .trim()}
+            </span>
+          </span>
+          <IconSparkle className="dm-pin-bar-icon" />
+        </button>
+      ) : null}
+
       {isDirect && searchOpen ? (
         <div className="chat-inline-search">
           <IconSearch className="chat-inline-search-icon" />
@@ -548,8 +590,9 @@ export function ChatView() {
               const cluster = isDirect
                 ? messageBubbleCluster(visibleMessages, index)
                 : undefined;
+              const pinNotice = msg.kind === "pin-notice";
               return (
-                <div key={msg.id}>
+                <div key={msg.id} className={pinNotice ? "dm-pin-item" : undefined}>
                   {showDay ? (
                     <ChatDayRule
                       dayKey={day}
@@ -563,13 +606,17 @@ export function ChatView() {
                     />
                   ) : null}
                   <div
-                    className={`dm-msg-wrap${mine ? " is-mine" : " is-theirs"}${
-                      cluster
-                        ? cluster.isLast
-                          ? " is-break"
-                          : " is-tight"
-                        : ""
-                    }`}
+                    className={
+                      pinNotice
+                        ? "dm-pin-item-inner"
+                        : `dm-msg-wrap${mine ? " is-mine" : " is-theirs"}${
+                            cluster
+                              ? cluster.isLast
+                                ? " is-break"
+                                : " is-tight"
+                              : ""
+                          }`
+                    }
                   >
                   <ChatMessage
                     msg={msg}
@@ -630,7 +677,11 @@ export function ChatView() {
                       void navigator.clipboard.writeText(row.body).catch(() => null);
                     }}
                     onPin={(row) => {
-                      void pinMessage(row.id, !row.pinned);
+                      if (row.pinned) {
+                        void pinMessage(row.id, false);
+                        return;
+                      }
+                      setPinTarget(row);
                     }}
                     onDelete={(row) => {
                       void deleteMessages([row.id]);
@@ -640,13 +691,7 @@ export function ChatView() {
                       setReplyTo(row);
                       requestAnimationFrame(() => areaRef.current?.focus());
                     }}
-                    onOpenQuote={(id) => {
-                      setHitId(id);
-                      const node = streamRef.current?.querySelector(
-                        `[data-msg-id="${CSS.escape(id)}"]`,
-                      );
-                      node?.scrollIntoView({ block: "center" });
-                    }}
+                    onOpenQuote={(id) => jumpToMessage(id)}
                   />
                   </div>
                 </div>
@@ -682,24 +727,6 @@ export function ChatView() {
             <p className="dm-blocked-note" role="status">
               You blocked this person. You can still read this chat.
             </p>
-          ) : null}
-          {active?.pinnedMessageId ? (
-            <button
-              type="button"
-              className="dm-pin-banner"
-              onClick={() => {
-                const id = active.pinnedMessageId;
-                if (!id) return;
-                setHitId(id);
-                const node = streamRef.current?.querySelector(
-                  `[data-msg-id="${CSS.escape(id)}"]`,
-                );
-                node?.scrollIntoView({ block: "center" });
-              }}
-            >
-              <span>You pinned a message</span>
-              <em>Go to message</em>
-            </button>
           ) : null}
           {selecting ? (
             <div className="dm-select-bar">
@@ -783,6 +810,19 @@ export function ChatView() {
       ) : null}
       {moveBlock ? (
         <TeamMoveSeatModal preview={moveBlock} onClose={() => setMoveBlock(null)} />
+      ) : null}
+      {pinTarget ? (
+        <PinModal
+          onClose={() => setPinTarget(null)}
+          onPin={(duration) => {
+            void pinMessage(
+              pinTarget.id,
+              true,
+              pinUntilFromDuration(duration),
+            );
+            setPinTarget(null);
+          }}
+        />
       ) : null}
       {forwardIds ? (
         <ForwardModal

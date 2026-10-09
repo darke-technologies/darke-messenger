@@ -140,7 +140,7 @@ button:not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hit):not(.newtab-
     .password-chip-save
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main),
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go),
 a,
 summary,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card),
@@ -182,7 +182,7 @@ button:not(:disabled):not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hi
     .bookmark-folder-toggle
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):hover,
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):hover,
 a:hover,
 summary:hover,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card):hover,
@@ -214,7 +214,7 @@ button:not(:disabled):not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hi
     .bookmark-folder-toggle
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):active,
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):active,
 a:active,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card):active,
 [role="tab"]:not(.newtab-space-tab):active,
@@ -23882,6 +23882,19 @@ h3.chat-settings-label {
   justify-content: flex-start;
 }
 
+.dm-pin-item {
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 8px 0 12px;
+  align-self: stretch;
+}
+
+.dm-pin-item-inner {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .dm-pane.is-direct .dm-stream.is-feed {
   padding: 8px 12px 12px;
   gap: 0;
@@ -24038,11 +24051,26 @@ h3.chat-settings-label {
   background: transparent;
   color: #a1a1aa;
   cursor: pointer;
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.dm-msg-more-btn:hover,
+.dm-msg-more-btn:active,
+.dm-msg-more-btn:focus,
+.dm-msg-more-btn:focus-visible {
+  color: #fff;
+  background: transparent;
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .dm-msg-more-btn svg {
   width: 18px;
   height: 18px;
+  color: inherit;
 }
 
 .dm-msg-menu {
@@ -24058,11 +24086,20 @@ h3.chat-settings-label {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
-.dm-bubble-row.is-mine .dm-msg-menu {
+.dm-msg-menu.is-portaled {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: auto;
+  right: auto;
+  z-index: 80;
+}
+
+.dm-bubble-row.is-mine .dm-msg-menu:not(.is-portaled) {
   left: 0;
 }
 
-.dm-bubble-row.is-theirs .dm-msg-menu {
+.dm-bubble-row.is-theirs .dm-msg-menu:not(.is-portaled) {
   right: 0;
 }
 
@@ -24113,23 +24150,187 @@ h3.chat-settings-label {
   color: #fff;
 }
 
-.dm-pin-banner {
+.dm-pin-bar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+  flex-shrink: 0;
   width: 100%;
-  padding: 8px 12px 10px;
+  padding: 10px 16px 10px 20px;
   border: 0;
-  background: transparent;
-  color: #a1a1aa;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 18, 0.98);
+  color: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.dm-pin-banner em {
-  font-style: normal;
-  color: #60a5fa;
+.dm-pin-bar-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.dm-pin-bar-copy strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.dm-pin-bar-copy span {
+  display: block;
+  overflow: hidden;
+  color: #a1a1aa;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-pin-bar-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: #a1a1aa;
+}
+
+.dm-pin-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  padding: 2px 8px 4px;
+  text-align: left;
+}
+
+.dm-pin-notice-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.dm-pin-notice-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #a1a1aa;
+}
+
+.dm-pin-notice-go {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3a3c;
+  color: #e4e4e7;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.dm-pin-notice-go:hover,
+.dm-pin-notice-go:active,
+.dm-pin-notice-go:focus,
+.dm-pin-notice-go:focus-visible {
+  background: #3a3a3c;
+  color: #e4e4e7;
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.pin-modal {
+  width: min(340px, calc(100vw - 32px));
+  padding: 6px 4px 14px;
+  border-radius: 22px;
+  background: #2c2c2e;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.pin-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 8px 20px;
+}
+
+.pin-modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.pin-modal-opts {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 8px;
+}
+
+.pin-opt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #f4f4f5;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pin-radio {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 2px solid #636366;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.pin-radio.is-on {
+  border-color: #3b82f6;
+  box-shadow: inset 0 0 0 5px #3b82f6;
+}
+
+.pin-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 4px 16px 4px;
+}
+
+.pin-cancel,
+.pin-confirm {
+  min-width: 88px;
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pin-cancel {
+  background: #3a3a3c;
+  color: #f4f4f5;
+}
+
+.pin-confirm {
+  background: #3b82f6;
+  color: #fff;
 }
 
 .dm-select-bar {
@@ -24328,7 +24529,7 @@ h3.chat-settings-label {
 .dm-bubble-row:hover .newsfeed-reply-btn,
 .dm-pane.is-direct .dm-bubble-row:hover > .newsfeed-reply-btn,
 .dm-pane.is-direct .dm-bubble-row:hover .dm-msg-more-btn,
-.dm-msg-more:has(.dm-msg-menu) .dm-msg-more-btn {
+.dm-msg-more.is-open .dm-msg-more-btn {
   opacity: 1;
 }
 

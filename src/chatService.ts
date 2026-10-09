@@ -382,7 +382,7 @@ export function disappearTtlMs(mode: DmThread["disappearAfter"]): number | null 
 }
 
 export function messageHasDisappeared(msg: DmMessage, thread: DmThread): boolean {
-  if (isNodeGreeting(msg)) return false;
+  if (isNodeGreeting(msg) || msg.kind === "pin-notice") return false;
   const ttl = disappearTtlMs(thread.disappearAfter);
   if (ttl == null) return false;
   return Date.now() - msg.at >= ttl;
@@ -405,9 +405,14 @@ export type BubbleCluster = {
 
 const CLUSTER_WINDOW_MS = 60_000;
 
+function isPinNotice(msg: DmMessage): boolean {
+  return msg.kind === "pin-notice";
+}
+
 function canClusterWith(a: DmMessage | undefined, b: DmMessage | undefined): boolean {
   if (!a || !b) return false;
   if (isLocalOnlySystemNotice(a) || isLocalOnlySystemNotice(b)) return false;
+  if (isPinNotice(a) || isPinNotice(b)) return false;
   if (isNodeGreeting(a) || isNodeGreeting(b)) return false;
   if (a.direction !== b.direction) return false;
   if (Math.abs(b.at - a.at) >= CLUSTER_WINDOW_MS) return false;
@@ -421,7 +426,7 @@ export function messageBubbleCluster(
   index: number,
 ): BubbleCluster {
   const cur = messages[index];
-  if (!cur || isLocalOnlySystemNotice(cur) || isNodeGreeting(cur)) {
+  if (!cur || isLocalOnlySystemNotice(cur) || isNodeGreeting(cur) || cur.kind === "pin-notice") {
     return { isFirst: true, isMiddle: false, isLast: true, showMeta: false };
   }
   const isFirst = !canClusterWith(messages[index - 1], cur);

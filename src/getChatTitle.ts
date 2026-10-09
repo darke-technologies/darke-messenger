@@ -84,6 +84,15 @@ export function resolveChatPreview(
 ): string {
   const last = thread.messages[thread.messages.length - 1];
   if (!last) return "";
+  if (last.kind === "pin-notice") {
+    const self = normId(currentUserId);
+    const by = normId(last.pinnedBy || "");
+    const who =
+      !by || by === self
+        ? "You"
+        : memberDisplayName(last.pinnedBy || "") || last.pinnedBy || "Someone";
+    return `${who} pinned a message`;
+  }
   if (isLocalOnlySystemNotice(last)) return NODE_PREVIEW;
 
   const snip = clipPreview(last.fileName || last.body);
