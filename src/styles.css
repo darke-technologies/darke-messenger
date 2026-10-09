@@ -23954,8 +23954,9 @@ h3.chat-settings-label {
 .dm-pane.is-direct .dm-bubble.is-sent {
   background-image: linear-gradient(
     180deg,
-    var(--hud-bubble-from, #ff6b00) 0%,
-    var(--hud-bubble-to, #9a3200) 100%
+    var(--hud-bubble-from, #c24e10) 0%,
+    var(--hud-bubble-mid, #8a320c) 55%,
+    var(--hud-bubble-to, #4a1608) 100%
   );
   background-repeat: no-repeat;
   color: #f4f4f5;

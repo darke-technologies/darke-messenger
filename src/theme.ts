@@ -104,15 +104,11 @@ export function applyAccentVars(id: ThemeId, root: HTMLElement = document.docume
       b: Math.round(b * 0.1),
     }),
   );
-  const sourceL = relativeLuminance(r, g, b);
-  const bubbleFrom =
-    sourceL > 0.38 ? scaleToLuminance(r, g, b, 0.32) : { r, g, b };
-  const bubbleTo = {
-    r: Math.round(bubbleFrom.r * 0.52),
-    g: Math.round(bubbleFrom.g * 0.48),
-    b: Math.round(bubbleFrom.b * 0.45),
-  };
+  const bubbleFrom = scaleToLuminance(r, g, b, 0.175);
+  const bubbleMid = scaleToLuminance(r, g, b, 0.1);
+  const bubbleTo = scaleToLuminance(r, g, b, 0.048);
   root.style.setProperty("--hud-bubble-from", toHex(bubbleFrom));
+  root.style.setProperty("--hud-bubble-mid", toHex(bubbleMid));
   root.style.setProperty("--hud-bubble-to", toHex(bubbleTo));
 }
 

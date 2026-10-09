@@ -344,7 +344,7 @@ export function ChatView() {
       root.querySelectorAll<HTMLElement>(".dm-bubble.is-sent").forEach((el) => {
         const top = el.getBoundingClientRect().top;
         el.style.backgroundImage =
-          "linear-gradient(180deg, var(--hud-bubble-from) 0%, var(--hud-bubble-to) 100%)";
+          "linear-gradient(180deg, var(--hud-bubble-from) 0%, var(--hud-bubble-mid) 55%, var(--hud-bubble-to) 100%)";
         el.style.backgroundRepeat = "no-repeat";
         el.style.backgroundSize = `100% ${span}px`;
         el.style.backgroundPosition = `center ${box.top - top}px`;
