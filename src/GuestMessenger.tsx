@@ -98,6 +98,7 @@ function GuestChatPane({ host }: { host: boolean }) {
       .replace(/^@/, "")
       .trim()
       .toLowerCase() || null,
+    slug,
   );
   const [composer, setComposer] = useState("");
   const [signalSession, setSignalSession] = useState(false);
@@ -228,8 +229,10 @@ function GuestChatPane({ host }: { host: boolean }) {
           placeholder="Type an end-to-end encrypted message..."
           aria-label="Encrypted message"
           onChange={(e) => {
-            setComposer(e.target.value);
-            notifyTyping();
+            const next = e.target.value;
+            setComposer(next);
+            if (next.trim()) notifyTyping();
+            else stopTyping();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

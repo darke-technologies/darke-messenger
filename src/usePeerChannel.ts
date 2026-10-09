@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { PeerConnectionState } from "./dmSessions";
-import { normalizeSessionKey } from "./dmSessions";
 import {
   encodeChat,
   encodeTyping,
@@ -13,11 +12,13 @@ import {
   type TypingKind,
 } from "./p2pProtocol";
 import {
+  initializeX3DHSession,
   isSignalV2Ciphertext,
   unwrapTextPayload,
   wrapTextPayload,
 } from "./lib/crypto/signal";
 import { supabase } from "./supabase";
+import { toSlug } from "./slug";
 
 /**
  * Local stand-in for a WebRTC DataChannel.
@@ -37,11 +38,9 @@ export type PeerChannel = {
   ingestRemote: (raw: string) => void;
 };
 
-function typingTopic(sessionKey: string): string {
-  const key = (normalizeSessionKey(sessionKey) ?? sessionKey)
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 80);
-  return `signal-ephemeral:${key}`;
+function typingTopic(self: string, peer: string): string {
+  const pair = [toSlug(self), toSlug(peer)].filter(Boolean).sort().join("-");
+  return `signal-ephemeral:${pair.slice(0, 80)}`;
 }
 
 type TypingInner = {
@@ -67,6 +66,7 @@ export function usePeerChannel(
   sessionKey: string | null,
   peerState: PeerConnectionState,
   peerUsername?: string | null,
+  selfUsername?: string | null,
 ): PeerChannel {
   const [connectionState, setConnectionState] =
     useState<PeerConnectionState>(peerState);
@@ -77,9 +77,12 @@ export function usePeerChannel(
   const typingHandlers = useRef(new Set<(frame: TypingFrame) => void>());
   const sessionRef = useRef(sessionKey);
   const peerRef = useRef(peerUsername ?? null);
+  const selfRef = useRef(selfUsername ?? null);
   const realtimeRef = useRef<RealtimeChannel | null>(null);
+  const subscribedRef = useRef(false);
   sessionRef.current = sessionKey;
   peerRef.current = peerUsername ?? null;
+  selfRef.current = selfUsername ?? null;
 
   useEffect(() => {
     setConnectionState(peerState);
@@ -87,13 +90,14 @@ export function usePeerChannel(
   }, [peerState, sessionKey]);
 
   useEffect(() => {
-    const key = sessionKey?.trim() || "";
-    const peer = (peerUsername ?? "").replace(/^@/, "").trim().toLowerCase();
-    if (!key || !peer) {
+    const peer = toSlug(peerUsername ?? "");
+    const self = toSlug(selfUsername ?? "");
+    if (!peer || !self || peer === self) {
       realtimeRef.current = null;
+      subscribedRef.current = false;
       return;
     }
-    const channel = supabase.channel(typingTopic(key), {
+    const channel = supabase.channel(typingTopic(self, peer), {
       config: { broadcast: { ack: false, self: false } },
     });
     channel.on(
@@ -107,25 +111,22 @@ export function usePeerChannel(
           if (!opened) return;
           const inner = parseTypingInner(opened);
           if (!inner) return;
-          const liveKey = sessionRef.current ?? "";
-          if (
-            (normalizeSessionKey(inner.s) ?? inner.s) !==
-            (normalizeSessionKey(liveKey) ?? liveKey)
-          ) {
-            return;
-          }
           const frame: TypingFrame = { type: inner.t, handle: peer };
           typingHandlers.current.forEach((handler) => handler(frame));
         })();
       },
     );
-    void channel.subscribe();
+    subscribedRef.current = false;
+    void channel.subscribe((status) => {
+      subscribedRef.current = status === "SUBSCRIBED";
+    });
     realtimeRef.current = channel;
     return () => {
+      subscribedRef.current = false;
       realtimeRef.current = null;
       void supabase.removeChannel(channel);
     };
-  }, [sessionKey, peerUsername]);
+  }, [peerUsername, selfUsername]);
 
   const transmit = useCallback(
     (payload: string) => {
@@ -163,20 +164,24 @@ export function usePeerChannel(
       transmit(encodeTyping(kind, who));
     }
     const key = sessionRef.current?.trim() || "";
-    const peer = (peerRef.current ?? "").replace(/^@/, "").trim().toLowerCase();
+    const peer = toSlug(peerRef.current ?? "");
     const live = realtimeRef.current;
-    if (!key || !peer || !live) return;
+    if (!peer || !live) return;
     void (async () => {
+      await initializeX3DHSession(peer);
       const envelope = await wrapTextPayload(
         peer,
         JSON.stringify({
           v: 2,
           kind: "typing",
           t: kind,
-          s: key,
+          s: key || peer,
         } satisfies TypingInner),
       );
       if (!envelope || !isSignalV2Ciphertext(envelope)) return;
+      if (!subscribedRef.current) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
       await live.send({
         type: "broadcast",
         event: "typing",

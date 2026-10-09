@@ -21,6 +21,7 @@ import {
   nodeFingerprint,
   nodeGreetingAlreadyRevealed,
   sidebarPeerHandle,
+  messageBubbleCluster,
 } from "./chatService";
 import {
   CHAT_FOCUS_EVENT,
@@ -72,10 +73,16 @@ export function ChatView() {
   const channel = usePeerChannel(
     active?.sessionKey ?? null,
     active?.connectionState ?? "WAITING FOR PEER",
-    (active?.peerUsername || active?.handle || "")
+    (
+      (active ? sidebarPeerHandle(active, slug) : null) ||
+      active?.peerUsername ||
+      active?.handle ||
+      ""
+    )
       .replace(/^@/, "")
       .trim()
       .toLowerCase() || null,
+    slug,
   );
   const live = channel.connectionState;
   const connected = live === "CONNECTED";
@@ -483,6 +490,9 @@ export function ChatView() {
               const prev = visibleMessages[index - 1];
               const showDay = !prev || chatDayKey(prev.at) !== day;
               const mine = msg.direction === "sent";
+              const cluster = isDirect
+                ? messageBubbleCluster(visibleMessages, index)
+                : undefined;
               return (
                 <div key={msg.id}>
                   {showDay ? (
@@ -498,13 +508,20 @@ export function ChatView() {
                     />
                   ) : null}
                   <div
-                    className={`dm-msg-wrap${mine ? " is-mine" : " is-theirs"}`}
+                    className={`dm-msg-wrap${mine ? " is-mine" : " is-theirs"}${
+                      cluster
+                        ? cluster.isLast
+                          ? " is-break"
+                          : " is-tight"
+                        : ""
+                    }`}
                   >
                   <ChatMessage
                     msg={msg}
                     you={me}
                     peer={peer}
                     isGroup={isGroup}
+                    cluster={cluster}
                     isAdmin={
                       isGroup &&
                       msg.kind !== "system" &&
@@ -586,6 +603,7 @@ export function ChatView() {
             onChange={setComposer}
             onSubmit={send}
             onTyping={notifyTyping}
+            onStopTyping={stopTyping}
             disabled={!active || peerBlocked}
             placeholder={`Message ${headerTitle || "chat"}`}
             replyLabel={

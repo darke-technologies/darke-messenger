@@ -396,6 +396,44 @@ export function isLocalOnlySystemNotice(msg: DmMessage): boolean {
   );
 }
 
+export type BubbleCluster = {
+  isFirst: boolean;
+  isMiddle: boolean;
+  isLast: boolean;
+  showMeta: boolean;
+};
+
+const CLUSTER_WINDOW_MS = 60_000;
+
+function canClusterWith(a: DmMessage | undefined, b: DmMessage | undefined): boolean {
+  if (!a || !b) return false;
+  if (isLocalOnlySystemNotice(a) || isLocalOnlySystemNotice(b)) return false;
+  if (isNodeGreeting(a) || isNodeGreeting(b)) return false;
+  if (a.direction !== b.direction) return false;
+  if (Math.abs(b.at - a.at) >= CLUSTER_WINDOW_MS) return false;
+  if (chatDayKey(a.at) !== chatDayKey(b.at)) return false;
+  return true;
+}
+
+/** Signal-style grouping: same sender within 1 minute shares a tail. */
+export function messageBubbleCluster(
+  messages: DmMessage[],
+  index: number,
+): BubbleCluster {
+  const cur = messages[index];
+  if (!cur || isLocalOnlySystemNotice(cur) || isNodeGreeting(cur)) {
+    return { isFirst: true, isMiddle: false, isLast: true, showMeta: false };
+  }
+  const isFirst = !canClusterWith(messages[index - 1], cur);
+  const isLast = !canClusterWith(cur, messages[index + 1]);
+  return {
+    isFirst,
+    isMiddle: !isFirst && !isLast,
+    isLast,
+    showMeta: isLast,
+  };
+}
+
 function greetingRevealKey(chatId: string): string {
   return `darke.node-greeting.shown.${chatId.trim()}`;
 }

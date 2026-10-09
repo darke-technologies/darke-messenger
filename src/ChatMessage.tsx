@@ -44,6 +44,7 @@ export function ChatMessage({
   peer,
   isAdmin = false,
   isGroup = false,
+  cluster,
 }: {
   msg: DmMessage;
   quoted?: DmMessage | null;
@@ -57,6 +58,12 @@ export function ChatMessage({
   peer: ChatPerson;
   isAdmin?: boolean;
   isGroup?: boolean;
+  cluster?: {
+    isFirst: boolean;
+    isMiddle: boolean;
+    isLast: boolean;
+    showMeta: boolean;
+  };
 }) {
   const system = isLocalOnlySystemNotice(msg);
   const mine = msg.direction === "sent";
@@ -113,10 +120,21 @@ export function ChatMessage({
     );
   }
 
+  const clusterClass = cluster
+    ? [
+        cluster.isFirst ? "is-cluster-first" : "",
+        cluster.isMiddle ? "is-cluster-middle" : "",
+        cluster.isLast ? "is-cluster-last" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+  const showMeta = !isGroup && (cluster?.showMeta ?? true);
+
   return (
     <article
       data-msg-id={msg.id}
-      className={`dm-bubble-row${mine ? " is-mine" : " is-theirs"}${highlighted ? " is-search-hit is-target" : ""}${isGroup ? "" : " is-direct"}`}
+      className={`dm-bubble-row${mine ? " is-mine" : " is-theirs"}${highlighted ? " is-search-hit is-target" : ""}${isGroup ? "" : " is-direct"}${clusterClass ? ` ${clusterClass}` : ""}`}
     >
       {!mine && isGroup ? (
         <UserAvatar
@@ -145,10 +163,12 @@ export function ChatMessage({
         ) : msg.replyToMessageId ? (
           <p className="dm-quote is-missing">Original message unavailable</p>
         ) : null}
-        <div className={`dm-bubble${mine ? " is-sent" : " is-received"}`}>
+        <div
+          className={`dm-bubble${mine ? " is-sent" : " is-received"}${clusterClass ? ` ${clusterClass}` : ""}`}
+        >
           <p>
             {body}
-            {!isGroup ? (
+            {showMeta ? (
               <time
                 className="dm-bubble-time"
                 dateTime={new Date(msg.at).toISOString()}
@@ -158,7 +178,9 @@ export function ChatMessage({
             ) : null}
           </p>
         </div>
-        {mine && status ? <span className="dm-bubble-status">{status}</span> : null}
+        {mine && showMeta && status ? (
+          <span className="dm-bubble-status">{status}</span>
+        ) : null}
         {isGroup ? replyBtn : null}
       </div>
       {!mine && !isGroup ? replyBtn : null}

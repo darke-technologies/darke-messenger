@@ -9,6 +9,7 @@ export function ChatInput({
   onChange,
   onSubmit,
   onTyping,
+  onStopTyping,
   disabled,
   placeholder,
   replyLabel,
@@ -20,6 +21,7 @@ export function ChatInput({
   onChange: (next: string) => void;
   onSubmit: (e?: FormEvent) => void;
   onTyping: () => void;
+  onStopTyping?: () => void;
   disabled: boolean;
   placeholder?: string;
   replyLabel: string | null;
@@ -75,9 +77,11 @@ export function ChatInput({
           placeholder={placeholder || "Enter message..."}
           aria-label="Encrypted message"
           onChange={(e) => {
-            onChange(e.target.value.slice(0, COMMENT_MAX));
+            const next = e.target.value.slice(0, COMMENT_MAX);
+            onChange(next);
             grow();
-            onTyping();
+            if (next.trim()) onTyping();
+            else onStopTyping?.();
           }}
           onInput={grow}
           onKeyDown={(e) => {

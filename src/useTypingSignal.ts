@@ -3,9 +3,9 @@ import { TYPING_START, TYPING_STOP } from "./p2pProtocol";
 import type { PeerChannel } from "./usePeerChannel";
 import { getBroadcastTyping, TYPING_PREF_CHANGE } from "./welcomePrefs";
 
-const START_THROTTLE_MS = 2000;
-const IDLE_STOP_MS = 2500;
-const STALE_CLEAR_MS = 4000;
+const START_THROTTLE_MS = 1500;
+const IDLE_STOP_MS = 3000;
+const STALE_CLEAR_MS = 3000;
 
 export function useTypingSignal({
   channel,
