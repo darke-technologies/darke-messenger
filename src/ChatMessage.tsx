@@ -10,7 +10,7 @@ import {
 import {
   IconCopy,
   IconEdit,
-  IconForward,
+  IconShareForward,
   IconMoreHorizontal,
   IconPin,
   IconSelect,
@@ -166,7 +166,7 @@ export function ChatMessage({
                 onForward?.(msg);
               }}
             >
-              <IconForward />
+              <IconShareForward />
               Forward
             </button>
           </li>

@@ -639,7 +639,7 @@ export function IconPhone({ className }: IconProps) {
   );
 }
 
-export function IconForward({ className }: IconProps) {
+export function IconShareForward({ className }: IconProps) {
   return (
     <Svg className={className}>
       <path d="M15 17h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4" />
