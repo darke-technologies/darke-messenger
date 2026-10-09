@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { isLocalOnlySystemNotice } from "./chatService";
 import {
   formatBubbleTime,
@@ -6,6 +7,15 @@ import {
   P2P_ENCLAVE_TITLE,
   type DmMessage,
 } from "./dmSessions";
+import {
+  IconCopy,
+  IconEdit,
+  IconForward,
+  IconMoreHorizontal,
+  IconPin,
+  IconSelect,
+  IconTrash,
+} from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 function ReplyIcon() {
@@ -45,6 +55,15 @@ export function ChatMessage({
   isAdmin = false,
   isGroup = false,
   cluster,
+  selecting = false,
+  selected = false,
+  onToggleSelect,
+  onForward,
+  onEdit,
+  onSelect,
+  onCopy,
+  onPin,
+  onDelete,
 }: {
   msg: DmMessage;
   quoted?: DmMessage | null;
@@ -64,6 +83,15 @@ export function ChatMessage({
     isLast: boolean;
     showMeta: boolean;
   };
+  selecting?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (msg: DmMessage) => void;
+  onForward?: (msg: DmMessage) => void;
+  onEdit?: (msg: DmMessage) => void;
+  onSelect?: (msg: DmMessage) => void;
+  onCopy?: (msg: DmMessage) => void;
+  onPin?: (msg: DmMessage) => void;
+  onDelete?: (msg: DmMessage) => void;
 }) {
   const system = isLocalOnlySystemNotice(msg);
   const mine = msg.direction === "sent";
@@ -92,6 +120,18 @@ export function ChatMessage({
       ? "Waiting for recipient to initialize security keys"
       : null;
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function close(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
   const replyBtn = (
     <button
       type="button"
@@ -101,6 +141,106 @@ export function ChatMessage({
       <ReplyIcon />
       Reply
     </button>
+  );
+
+  const menuBtn = (
+    <div className="dm-msg-more" ref={menuRef}>
+      <button
+        type="button"
+        className="dm-msg-more-btn"
+        aria-label="Message options"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <IconMoreHorizontal />
+      </button>
+      {menuOpen ? (
+        <ul className="dm-msg-menu" role="menu">
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onForward?.(msg);
+              }}
+            >
+              <IconForward />
+              Forward
+            </button>
+          </li>
+          {mine ? (
+            <li>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onEdit?.(msg);
+                }}
+              >
+                <IconEdit />
+                Edit
+              </button>
+            </li>
+          ) : null}
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onSelect?.(msg);
+              }}
+            >
+              <IconSelect />
+              Select
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onCopy?.(msg);
+              }}
+            >
+              <IconCopy />
+              Copy text
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onPin?.(msg);
+              }}
+            >
+              <IconPin />
+              {msg.pinned ? "Unpin" : "Pin"}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              className="is-danger"
+              onClick={() => {
+                setMenuOpen(false);
+                onDelete?.(msg);
+              }}
+            >
+              <IconTrash />
+              Delete
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
   );
 
   if (system) {
@@ -144,7 +284,23 @@ export function ChatMessage({
           initialsLength={2}
         />
       ) : null}
-      {mine && !isGroup ? replyBtn : null}
+      {selecting ? (
+        <button
+          type="button"
+          className={`dm-msg-pick${selected ? " is-on" : ""}`}
+          aria-pressed={selected}
+          aria-label={selected ? "Deselect message" : "Select message"}
+          onClick={() => onToggleSelect?.(msg)}
+        >
+          {selected ? "✓" : ""}
+        </button>
+      ) : null}
+      {mine && !selecting ? (
+        <>
+          {menuBtn}
+          {!isGroup ? replyBtn : null}
+        </>
+      ) : null}
       <div className="dm-bubble-col">
         {!mine && isGroup ? (
           <span className="dm-bubble-name">
@@ -173,6 +329,7 @@ export function ChatMessage({
                 className="dm-bubble-time"
                 dateTime={new Date(msg.at).toISOString()}
               >
+                {msg.edited ? "edited · " : ""}
                 {formatBubbleTime(msg.at)}
               </time>
             ) : null}
@@ -183,7 +340,12 @@ export function ChatMessage({
         ) : null}
         {isGroup ? replyBtn : null}
       </div>
-      {!mine && !isGroup ? replyBtn : null}
+      {!mine && !selecting ? (
+        <>
+          {!isGroup ? replyBtn : null}
+          {menuBtn}
+        </>
+      ) : null}
     </article>
   );
 }

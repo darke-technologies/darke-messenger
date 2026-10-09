@@ -43,6 +43,7 @@ import { supabase } from "./supabase";
 import {
   fetchAndPurgeMailbox,
   listSentMailboxIds,
+  queueMailboxControl,
   queueMailboxFile,
   queueMailboxMessage,
 } from "./mailbox";
@@ -60,6 +61,7 @@ import {
   isFounderThread,
   isChatOwner,
   listChatGuests,
+  listChatMemberHandles,
   normalizeChatGuestHandle,
   sidebarPeerHandle,
 } from "./chatService";
@@ -136,8 +138,17 @@ type DmContextValue = {
   joinPeer: (raw: string) => boolean;
   sendChat: (
     body: string,
-    opts?: { mailbox?: boolean; file?: File; replyToMessageId?: string },
+    opts?: {
+      mailbox?: boolean;
+      file?: File;
+      replyToMessageId?: string;
+      threadId?: string;
+    },
   ) => Promise<void>;
+  editMessage: (messageId: string, body: string) => Promise<void>;
+  deleteMessages: (messageIds: string[]) => Promise<void>;
+  pinMessage: (messageId: string, pinned?: boolean) => Promise<void>;
+  forwardMessages: (messageIds: string[], threadIds: string[]) => Promise<void>;
   receivePeerChat: (
     body: string,
     opts?: { replyToMessageId?: string },
@@ -641,13 +652,14 @@ export function DmProvider({
   }, [slug, pro]);
 
   const sendChat = useCallback(
-    async (body: string, opts?: { mailbox?: boolean; file?: File; replyToMessageId?: string }) => {
+    async (body: string, opts?: { mailbox?: boolean; file?: File; replyToMessageId?: string; threadId?: string }) => {
       const file = opts?.file;
       const text = body.trim() || file?.name || "";
-      if ((!text && !file) || !activeId) return;
+      const targetId = opts?.threadId || activeId;
+      if ((!text && !file) || !targetId) return;
       const localId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const fileUrl = file ? URL.createObjectURL(file) : undefined;
-      const thread = threadsRef.current.find((row) => row.id === activeId);
+      const thread = threadsRef.current.find((row) => row.id === targetId);
       const quoted = opts?.replyToMessageId
         ? thread?.messages.find((msg) => msg.id === opts.replyToMessageId)
         : undefined;
@@ -669,7 +681,7 @@ export function DmProvider({
       };
       setThreads((rows) =>
         rows.map((row) =>
-          row.id === activeId
+          row.id === targetId
             ? { ...row, messages: [...row.messages, optimistic] }
             : row,
         ),
@@ -680,7 +692,8 @@ export function DmProvider({
         (thread ? sidebarPeerHandle(thread, slug) : null) ||
         thread?.peerUsername ||
         peerUsernameFromHandle(thread?.handle ?? "");
-      if (!recipient || !thread) {
+      const selfNote = Boolean(recipient && recipient === slug);
+      if (!thread || !recipient || selfNote) {
         sendingIdsRef.current.delete(localId);
         return;
       }
@@ -699,6 +712,7 @@ export function DmProvider({
             recipient,
             sessionKey: thread.sessionKey,
             body: text,
+            messageId: localId,
           }).catch((): { ok: false; reason: "error" } => ({
             ok: false,
             reason: "error",
@@ -706,7 +720,7 @@ export function DmProvider({
       if (!queued.ok) {
         setThreads((rows) =>
           rows.map((row) =>
-            row.id === activeId
+            row.id === targetId
               ? {
                   ...row,
                   messages: row.messages.map((msg) =>
@@ -723,7 +737,7 @@ export function DmProvider({
       }
       setThreads((rows) =>
         rows.map((row) =>
-          row.id === activeId
+          row.id === targetId
             ? {
                 ...row,
                 messages: row.messages.map((msg) =>
@@ -738,6 +752,149 @@ export function DmProvider({
       sendingIdsRef.current.delete(localId);
     },
     [activeId, guest, slug],
+  );
+
+  const peersForThread = useCallback(
+    (thread: DmThread): string[] => {
+      if (threadIsGroup(thread)) {
+        return listChatMemberHandles(thread, slug)
+          .map((handle) => normalizeChatGuestHandle(handle))
+          .filter((handle) => handle && handle !== slug && handle !== "__self__");
+      }
+      const peer =
+        sidebarPeerHandle(thread, slug) ||
+        thread.peerUsername ||
+        peerUsernameFromHandle(thread.handle ?? "");
+      if (!peer || peer === slug) return [];
+      return [peer];
+    },
+    [slug],
+  );
+
+  const editMessage = useCallback(
+    async (messageId: string, body: string) => {
+      const text = body.trim();
+      if (!text || !activeId) return;
+      const thread = threadsRef.current.find((row) => row.id === activeId);
+      const current = thread?.messages.find((msg) => msg.id === messageId);
+      if (!thread || !current || current.direction !== "sent") return;
+      setThreads((rows) =>
+        rows.map((row) =>
+          row.id === activeId
+            ? {
+                ...row,
+                messages: row.messages.map((msg) =>
+                  msg.id === messageId ? { ...msg, body: text, edited: true } : msg,
+                ),
+              }
+            : row,
+        ),
+      );
+      if (guest) return;
+      await Promise.all(
+        peersForThread(thread).map((recipient) =>
+          queueMailboxControl({
+            sender: slug,
+            recipient,
+            sessionKey: thread.sessionKey,
+            kind: "edit",
+            messageId,
+            body: text,
+          }).catch(() => null),
+        ),
+      );
+    },
+    [activeId, guest, peersForThread, slug],
+  );
+
+  const deleteMessages = useCallback(
+    async (messageIds: string[]) => {
+      const ids = [...new Set(messageIds.filter(Boolean))];
+      if (!ids.length || !activeId) return;
+      const thread = threadsRef.current.find((row) => row.id === activeId);
+      if (!thread) return;
+      setThreads((rows) =>
+        rows.map((row) =>
+          row.id === activeId
+            ? {
+                ...row,
+                messages: row.messages.filter((msg) => !ids.includes(msg.id)),
+                pinnedMessageId: ids.includes(row.pinnedMessageId ?? "")
+                  ? null
+                  : row.pinnedMessageId,
+              }
+            : row,
+        ),
+      );
+      if (guest) return;
+      await Promise.all(
+        ids.flatMap((messageId) =>
+          peersForThread(thread).map((recipient) =>
+            queueMailboxControl({
+              sender: slug,
+              recipient,
+              sessionKey: thread.sessionKey,
+              kind: "delete",
+              messageId,
+            }).catch(() => null),
+          ),
+        ),
+      );
+    },
+    [activeId, guest, peersForThread, slug],
+  );
+
+  const pinMessage = useCallback(
+    async (messageId: string, pinned = true) => {
+      if (!activeId) return;
+      const thread = threadsRef.current.find((row) => row.id === activeId);
+      if (!thread) return;
+      setThreads((rows) =>
+        rows.map((row) =>
+          row.id === activeId
+            ? {
+                ...row,
+                pinnedMessageId: pinned ? messageId : null,
+                messages: row.messages.map((msg) => ({
+                  ...msg,
+                  pinned: pinned ? msg.id === messageId : false,
+                })),
+              }
+            : row,
+        ),
+      );
+      if (guest) return;
+      await Promise.all(
+        peersForThread(thread).map((recipient) =>
+          queueMailboxControl({
+            sender: slug,
+            recipient,
+            sessionKey: thread.sessionKey,
+            kind: "pin",
+            messageId,
+            pinned,
+          }).catch(() => null),
+        ),
+      );
+    },
+    [activeId, guest, peersForThread, slug],
+  );
+
+  const forwardMessages = useCallback(
+    async (messageIds: string[], threadIds: string[]) => {
+      const source = threadsRef.current.find((row) => row.id === activeId);
+      const texts = (source?.messages ?? [])
+        .filter((msg) => messageIds.includes(msg.id))
+        .map((msg) => msg.body.trim())
+        .filter(Boolean);
+      if (!texts.length) return;
+      for (const threadId of threadIds) {
+        for (const text of texts) {
+          await sendChat(text, { mailbox: true, threadId });
+        }
+      }
+    },
+    [activeId, sendChat],
   );
 
   const receivePeerChat = useCallback(
@@ -778,8 +935,51 @@ export function DmProvider({
       let next = rows;
       for (const item of incoming) {
         const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
+        const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
+        const existing =
+          next.find((row) => row.sessionKey === key) ??
+          next.find(
+            (row) =>
+              !threadIsGroup(row) && sidebarPeerHandle(row, slug) === sender,
+          );
+        if (item.kind === "edit" || item.kind === "delete" || item.kind === "pin") {
+          if (!existing || !item.messageId) continue;
+          next = next.map((row) => {
+            if (row.id !== existing.id) return row;
+            if (item.kind === "delete") {
+              return {
+                ...row,
+                messages: row.messages.filter((msg) => msg.id !== item.messageId),
+                pinnedMessageId:
+                  row.pinnedMessageId === item.messageId
+                    ? null
+                    : row.pinnedMessageId,
+              };
+            }
+            if (item.kind === "pin") {
+              const on = item.pinned !== false;
+              return {
+                ...row,
+                pinnedMessageId: on ? item.messageId : null,
+                messages: row.messages.map((msg) => ({
+                  ...msg,
+                  pinned: on && msg.id === item.messageId,
+                })),
+              };
+            }
+            return {
+              ...row,
+              messages: row.messages.map((msg) =>
+                msg.id === item.messageId
+                  ? { ...msg, body: item.body || msg.body, edited: true }
+                  : msg,
+              ),
+            };
+          });
+          continue;
+        }
         const message: DmMessage = {
-          id: `mb-${item.id}`,
+          id: item.messageId || `mb-${item.id}`,
           direction: "received",
           body: item.body,
           at: item.at,
@@ -789,13 +989,6 @@ export function DmProvider({
           fileUrl: item.fileUrl,
           fileSize: item.fileSize,
         };
-        const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
-        const existing =
-          next.find((row) => row.sessionKey === key) ??
-          next.find(
-            (row) =>
-              !threadIsGroup(row) && sidebarPeerHandle(row, slug) === sender,
-          );
         if (existing) {
           if (
             next.some((row) =>
@@ -1167,6 +1360,10 @@ export function DmProvider({
       copyChatLink,
       joinPeer,
       sendChat,
+      editMessage,
+      deleteMessages,
+      pinMessage,
+      forwardMessages,
       receivePeerChat,
       renameActive,
       renameThread,
@@ -1200,6 +1397,10 @@ export function DmProvider({
       copyChatLink,
       joinPeer,
       sendChat,
+      editMessage,
+      deleteMessages,
+      pinMessage,
+      forwardMessages,
       receivePeerChat,
       renameActive,
       renameThread,

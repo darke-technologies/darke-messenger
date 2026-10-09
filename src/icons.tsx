@@ -639,6 +639,44 @@ export function IconPhone({ className }: IconProps) {
   );
 }
 
+export function IconForward({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M15 17h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4" />
+      <path d="m12 15 5-5-5-5" />
+      <path d="M17 10H5a2 2 0 0 0-2 2v7" />
+    </Svg>
+  );
+}
+
+export function IconEdit({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+    </Svg>
+  );
+}
+
+export function IconTrash({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M7 7l1 13h8l1-13" />
+    </Svg>
+  );
+}
+
+export function IconSelect({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="m8.5 12.5 2.2 2.2 4.8-5.2" />
+    </Svg>
+  );
+}
+
 export function IconMoreHorizontal({ className }: IconProps) {
   return (
     <Svg className={className}>

@@ -11,7 +11,7 @@ import { supabase } from "./supabase";
 
 export const MAILBOX_BUCKET = "pending-mailbox";
 
-export type MailboxKind = "text" | "file";
+export type MailboxKind = "text" | "file" | "edit" | "delete" | "pin";
 
 export type MailboxPlain = {
   v: 2;
@@ -20,6 +20,8 @@ export type MailboxPlain = {
   body?: string;
   fileName?: string;
   mime?: string;
+  messageId?: string;
+  pinned?: boolean;
 };
 
 export type MailboxEnqueue =
@@ -38,10 +40,15 @@ export type MailboxRow = {
 function parseInner(raw: string): MailboxPlain | null {
   try {
     const parsed = JSON.parse(raw) as Partial<MailboxPlain>;
+    if (parsed.v !== 2 || typeof parsed.sessionKey !== "string") {
+      return null;
+    }
     if (
-      parsed.v !== 2 ||
-      typeof parsed.sessionKey !== "string" ||
-      (parsed.kind !== "text" && parsed.kind !== "file")
+      parsed.kind !== "text" &&
+      parsed.kind !== "file" &&
+      parsed.kind !== "edit" &&
+      parsed.kind !== "delete" &&
+      parsed.kind !== "pin"
     ) {
       return null;
     }
@@ -52,6 +59,9 @@ function parseInner(raw: string): MailboxPlain | null {
       body: parsed.body,
       fileName: parsed.fileName,
       mime: parsed.mime,
+      messageId:
+        typeof parsed.messageId === "string" ? parsed.messageId : undefined,
+      pinned: parsed.pinned === true,
     };
   } catch {
     return null;
@@ -117,6 +127,7 @@ export async function queueMailboxMessage(opts: {
   recipient: string;
   sessionKey: string;
   body: string;
+  messageId?: string;
 }): Promise<MailboxEnqueue> {
   const text = opts.body.trim();
   if (!text) return { ok: false, reason: "error" };
@@ -127,6 +138,7 @@ export async function queueMailboxMessage(opts: {
       sessionKey: opts.sessionKey,
       kind: "text",
       body: text,
+      messageId: opts.messageId,
     },
     [text],
   );
@@ -136,6 +148,37 @@ export async function queueMailboxMessage(opts: {
     recipient: opts.recipient,
     ciphertext: packed.envelope,
     secrets: [text],
+  });
+}
+
+export async function queueMailboxControl(opts: {
+  sender: string;
+  recipient: string;
+  sessionKey: string;
+  kind: "edit" | "delete" | "pin";
+  messageId: string;
+  body?: string;
+  pinned?: boolean;
+}): Promise<MailboxEnqueue> {
+  const secrets = [opts.messageId, opts.body ?? ""].filter((s) => s.length >= 8);
+  const packed = await wrapMailboxInner(
+    opts.recipient,
+    {
+      v: 2,
+      sessionKey: opts.sessionKey,
+      kind: opts.kind,
+      messageId: opts.messageId,
+      body: opts.body,
+      pinned: opts.pinned,
+    },
+    secrets,
+  );
+  if (!packed.ok || !packed.envelope) return packed;
+  return insertCiphertextOnly({
+    sender: opts.sender,
+    recipient: opts.recipient,
+    ciphertext: packed.envelope,
+    secrets,
   });
 }
 
@@ -223,6 +266,8 @@ export type FetchedMailbox = {
   fileUrl?: string;
   fileSize?: number;
   at: number;
+  messageId?: string;
+  pinned?: boolean;
 };
 
 const claimedMailboxIds = new Set<string>();
@@ -294,6 +339,8 @@ async function loadAndPurgeMailbox(
         fileUrl,
         fileSize,
         at: Date.parse(row.created_at) || Date.now(),
+        messageId: meta.messageId,
+        pinned: meta.pinned,
       });
       await purgeRow(row);
     } catch {

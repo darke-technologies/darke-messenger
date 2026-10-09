@@ -47,6 +47,8 @@ export type DmMessage = {
   is_ephemeral?: boolean;
   shareLink?: string;
   title?: string;
+  edited?: boolean;
+  pinned?: boolean;
 };
 
 export type RoomKind = "team" | "direct";
@@ -78,6 +80,7 @@ export type DmThread = {
   invitedHandles?: string[];
   chatGuests?: ChatGuest[];
   pinned?: boolean;
+  pinnedMessageId?: string | null;
   unread?: number;
   kind?: "founder";
   isGroup?: boolean;

@@ -13,6 +13,7 @@ export function ChatInput({
   disabled,
   placeholder,
   replyLabel,
+  editLabel,
   onCancelReply,
   onAttach,
   areaRef,
@@ -25,6 +26,7 @@ export function ChatInput({
   disabled: boolean;
   placeholder?: string;
   replyLabel: string | null;
+  editLabel?: string | null;
   onCancelReply: () => void;
   onAttach: (file: File | undefined) => void;
   areaRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -40,7 +42,14 @@ export function ChatInput({
 
   return (
     <form className="dm-chat-console" onSubmit={onSubmit}>
-      {replyLabel ? (
+      {editLabel ? (
+        <div className="newsfeed-replying">
+          <span>Editing message</span>
+          <button type="button" onClick={onCancelReply}>
+            Cancel
+          </button>
+        </div>
+      ) : replyLabel ? (
         <div className="newsfeed-replying">
           <span>Replying to {replyLabel}</span>
           <button type="button" onClick={onCancelReply}>

@@ -25,6 +25,7 @@ import {
 } from "./chatService";
 import {
   CHAT_FOCUS_EVENT,
+  generateSessionKey,
   sessionShareLink,
   type ChatFocusDetail,
   type DmMessage,
@@ -43,6 +44,7 @@ import { threadIsGroup } from "./chatController";
 import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
 import type { TeamMovePreview } from "./teamService";
 import { blockPeer, isPeerBlocked } from "./blockedPeers";
+import { ForwardModal } from "./ForwardModal";
 import { IconSearch } from "./icons";
 import { THEME_CHANGE } from "./theme";
 import {
@@ -57,6 +59,12 @@ export function ChatView() {
   const {
     active,
     sendChat,
+    editMessage,
+    deleteMessages,
+    pinMessage,
+    forwardMessages,
+    threads,
+    startEncryptedChat,
     receivePeerChat,
     copyChatLink,
     copied,
@@ -117,6 +125,10 @@ export function ChatView() {
   const [signalSession, setSignalSession] = useState(false);
   const [dayMenu, setDayMenu] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [forwardIds, setForwardIds] = useState<string[] | null>(null);
   const [chatQuery, setChatQuery] = useState("");
   const [blockedTick, setBlockedTick] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
@@ -131,6 +143,10 @@ export function ChatView() {
     setDayMenu(null);
     setSearchOpen(false);
     setChatQuery("");
+    setEditingId(null);
+    setSelecting(false);
+    setSelectedIds([]);
+    setForwardIds(null);
   }, [active?.id]);
 
   useEffect(() => {
@@ -281,6 +297,13 @@ export function ChatView() {
     e?.preventDefault();
     const text = composer.trim();
     if (!text || !active) return;
+    if (editingId) {
+      void editMessage(editingId, text);
+      setEditingId(null);
+      setComposer("");
+      stopTyping();
+      return;
+    }
     const replyId = replyTo?.id;
     if (p2pLive && signalPeer) {
       void (async () => {
@@ -583,7 +606,37 @@ export function ChatView() {
                     connected={connected}
                     canInvite={canInvite}
                     onAddPeople={() => setInviteOpen(true)}
+                    selecting={selecting}
+                    selected={selectedIds.includes(msg.id)}
+                    onToggleSelect={(row) => {
+                      setSelectedIds((ids) =>
+                        ids.includes(row.id)
+                          ? ids.filter((id) => id !== row.id)
+                          : [...ids, row.id],
+                      );
+                    }}
+                    onForward={(row) => setForwardIds([row.id])}
+                    onEdit={(row) => {
+                      setEditingId(row.id);
+                      setReplyTo(null);
+                      setComposer(row.body);
+                      requestAnimationFrame(() => areaRef.current?.focus());
+                    }}
+                    onSelect={(row) => {
+                      setSelecting(true);
+                      setSelectedIds([row.id]);
+                    }}
+                    onCopy={(row) => {
+                      void navigator.clipboard.writeText(row.body).catch(() => null);
+                    }}
+                    onPin={(row) => {
+                      void pinMessage(row.id, !row.pinned);
+                    }}
+                    onDelete={(row) => {
+                      void deleteMessages([row.id]);
+                    }}
                     onReply={(row) => {
+                      setEditingId(null);
                       setReplyTo(row);
                       requestAnimationFrame(() => areaRef.current?.focus());
                     }}
@@ -630,6 +683,57 @@ export function ChatView() {
               You blocked this person. You can still read this chat.
             </p>
           ) : null}
+          {active?.pinnedMessageId ? (
+            <button
+              type="button"
+              className="dm-pin-banner"
+              onClick={() => {
+                const id = active.pinnedMessageId;
+                if (!id) return;
+                setHitId(id);
+                const node = streamRef.current?.querySelector(
+                  `[data-msg-id="${CSS.escape(id)}"]`,
+                );
+                node?.scrollIntoView({ block: "center" });
+              }}
+            >
+              <span>You pinned a message</span>
+              <em>Go to message</em>
+            </button>
+          ) : null}
+          {selecting ? (
+            <div className="dm-select-bar">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelecting(false);
+                  setSelectedIds([]);
+                }}
+              >
+                Cancel
+              </button>
+              <span>{selectedIds.length} selected</span>
+              <button
+                type="button"
+                disabled={!selectedIds.length}
+                onClick={() => setForwardIds(selectedIds)}
+              >
+                Forward
+              </button>
+              <button
+                type="button"
+                className="is-danger"
+                disabled={!selectedIds.length}
+                onClick={() => {
+                  void deleteMessages(selectedIds);
+                  setSelecting(false);
+                  setSelectedIds([]);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          ) : (
           <ChatInput
             value={composer}
             onChange={setComposer}
@@ -646,10 +750,15 @@ export function ChatView() {
                     .slice(0, 80) || "message"
                 : null
             }
-            onCancelReply={() => setReplyTo(null)}
+            editLabel={editingId ? "edit" : null}
+            onCancelReply={() => {
+              setReplyTo(null);
+              setEditingId(null);
+            }}
             onAttach={attachFile}
             areaRef={areaRef}
           />
+          )}
         </>
       ) : null}
       {inviteOpen && canInvite && active ? (
@@ -674,6 +783,31 @@ export function ChatView() {
       ) : null}
       {moveBlock ? (
         <TeamMoveSeatModal preview={moveBlock} onClose={() => setMoveBlock(null)} />
+      ) : null}
+      {forwardIds ? (
+        <ForwardModal
+          slug={slug}
+          threads={threads}
+          currentId={active?.id ?? null}
+          onClose={() => setForwardIds(null)}
+          onEnsureNoteSelf={() => {
+            const existing = threads.find(
+              (row) =>
+                !threadIsGroup(row) &&
+                (row.peerUsername || row.handle) === slug,
+            );
+            if (existing) return existing.id;
+            const key = generateSessionKey();
+            startEncryptedChat("", key, false, "direct", slug);
+            return key;
+          }}
+          onForward={(threadIds) => {
+            void forwardMessages(forwardIds, threadIds);
+            setForwardIds(null);
+            setSelecting(false);
+            setSelectedIds([]);
+          }}
+        />
       ) : null}
     </section>
   );
