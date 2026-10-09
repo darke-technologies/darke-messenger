@@ -961,7 +961,7 @@ export function DmProvider({
             (row) =>
               !threadIsGroup(row) && sidebarPeerHandle(row, slug) === sender,
           );
-        if (item.kind === "edit" || item.kind === "delete" || item.kind === "pin") {
+        if (item.kind === "edit" || item.kind === "delete") {
           if (!existing || !item.messageId) continue;
           next = next.map((row) => {
             if (row.id !== existing.id) return row;
@@ -981,32 +981,6 @@ export function DmProvider({
                     : row.pinnedUntil,
               };
             }
-            if (item.kind === "pin") {
-              const on = item.pinned !== false;
-              const by = sender;
-              const next: DmThread = {
-                ...row,
-                pinnedMessageId: on ? item.messageId : null,
-                pinnedBy: on ? by : null,
-                pinnedUntil: on ? item.pinUntil ?? null : null,
-                messages: row.messages.map((msg) => ({
-                  ...msg,
-                  pinned: on && msg.id === item.messageId,
-                })),
-              };
-              if (!on || !item.messageId) return next;
-              return {
-                ...next,
-                messages: [
-                  ...next.messages,
-                  makePinNotice({
-                    messageId: item.messageId,
-                    by,
-                    at: item.at,
-                  }),
-                ],
-              };
-            }
             return {
               ...row,
               messages: row.messages.map((msg) =>
@@ -1014,6 +988,37 @@ export function DmProvider({
                   ? { ...msg, body: item.body || msg.body, edited: true }
                   : msg,
               ),
+            };
+          });
+          continue;
+        }
+        if (item.kind === "pin") {
+          if (!existing) continue;
+          const on = item.pinned !== false;
+          const targetId = item.messageId || existing.pinnedMessageId || "";
+          next = next.map((row) => {
+            if (row.id !== existing.id) return row;
+            const pinnedRow: DmThread = {
+              ...row,
+              pinnedMessageId: on ? targetId || row.pinnedMessageId : null,
+              pinnedBy: on ? sender : null,
+              pinnedUntil: on ? item.pinUntil ?? null : null,
+              messages: row.messages.map((msg) => ({
+                ...msg,
+                pinned: on && Boolean(targetId) && msg.id === targetId,
+              })),
+            };
+            if (!on) return pinnedRow;
+            return {
+              ...pinnedRow,
+              messages: [
+                ...pinnedRow.messages,
+                makePinNotice({
+                  messageId: targetId,
+                  by: sender,
+                  at: item.at,
+                }),
+              ],
             };
           });
           continue;

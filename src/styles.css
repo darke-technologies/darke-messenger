@@ -140,7 +140,7 @@ button:not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hit):not(.newtab-
     .password-chip-save
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go),
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):not(.dm-pin-bar),
 a,
 summary,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card),
@@ -182,7 +182,7 @@ button:not(:disabled):not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hi
     .bookmark-folder-toggle
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):hover,
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):not(.dm-pin-bar):hover,
 a:hover,
 summary:hover,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card):hover,
@@ -214,7 +214,7 @@ button:not(:disabled):not(.follow-pill):not(.newsfeed-follow):not(.newtab-orb-hi
     .bookmark-folder-toggle
   ):not(.password-chip-save):not(.password-chip-fill):not(.chip-btn):not(.welcome-primary):not(.welcome-copy):not(.welcome-share-btn):not(.board-copy):not(.welcome-feature):not(
     .newtab-center
-  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):active,
+  ):not(.apps-card-main):not(.people-card-main):not(.movies-card-main):not(.games-card-main):not(.movies-load-more):not(.books-card-main):not(.books-load-more):not(.apps-builder):not(.apps-listing-follow):not(.apps-card-edit):not(.apps-modal-nav):not(.profile-nav-arrow):not(.profile-nav-btn):not(.profile-nav-back):not(.gate-photo):not(.projects-acc-toggle):not(.projects-acc-add):not(.projects-acc-item):not(.projects-acc-empty-btn):not(.projects-choice-btn):not(.apps-hero-nav):not(.apps-profile-back):not(.apps-profile-edit):not(.apps-profile-edit-listing):not(.apps-profile-app):not(.profile-fact-link):not(.apps-media-choice):not(.apps-media-drop):not(.apps-media-cancel):not(.apps-media-yt-btn):not(.win-btn):not(.darkeid-path-btn):not(.newsfeed-card):not(.nav-plain):not(.rail-nav):not(.outer-rail-btn):not(.bunker-collapse-tab):not(.app-topbar-invite):not(.ws-scope-btn):not(.ws-invite-person):not(.sidebar-logo-hit):not(.sidebar-head-btn):not(.ws-logo-menu-item):not(.ws-logo-menu-unlock):not(.nm-hit):not(.dm-day-chip):not(.dm-mic-btn):not(.dm-nav-more):not(.dm-nav-row-main):not(.dm-msg-more-btn):not(.dm-pin-notice-go):not(.dm-pin-bar):active,
 a:active,
 [role="button"]:not(.newtab-orb-hit):not(.newsfeed-card):active,
 [role="tab"]:not(.newtab-space-tab):active,
@@ -23892,7 +23892,7 @@ h3.chat-settings-label {
 .dm-pin-item-inner {
   display: flex;
   width: 100%;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .dm-pane.is-direct .dm-stream.is-feed {
@@ -24163,6 +24163,19 @@ h3.chat-settings-label {
   color: inherit;
   text-align: left;
   cursor: pointer;
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.dm-pin-bar:hover,
+.dm-pin-bar:active,
+.dm-pin-bar:focus,
+.dm-pin-bar:focus-visible {
+  background: rgba(16, 16, 18, 0.98);
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .dm-pin-bar-copy {
@@ -24196,13 +24209,13 @@ h3.chat-settings-label {
 .dm-pin-notice {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   flex: 0 0 auto;
   width: auto;
   max-width: 100%;
   padding: 2px 8px 4px;
-  text-align: left;
+  text-align: center;
 }
 
 .dm-pin-notice-line {

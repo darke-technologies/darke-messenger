@@ -164,7 +164,7 @@ export async function queueMailboxControl(opts: {
   pinned?: boolean;
   pinUntil?: number | null;
 }): Promise<MailboxEnqueue> {
-  const secrets = [opts.messageId, opts.body ?? ""].filter((s) => s.length >= 8);
+  const secrets = [opts.body ?? ""].filter((s) => s.length >= 8);
   const packed = await wrapMailboxInner(
     opts.recipient,
     {
@@ -172,7 +172,7 @@ export async function queueMailboxControl(opts: {
       sessionKey: opts.sessionKey,
       kind: opts.kind,
       messageId: opts.messageId,
-      body: opts.body,
+      body: opts.body ?? (opts.kind === "pin" ? "pinned a message" : undefined),
       pinned: opts.pinned,
       pinUntil: opts.pinUntil,
     },

@@ -48,7 +48,7 @@ import type { TeamMovePreview } from "./teamService";
 import { blockPeer, isPeerBlocked } from "./blockedPeers";
 import { ForwardModal } from "./ForwardModal";
 import { PinModal } from "./PinModal";
-import { IconSearch, IconSparkle } from "./icons";
+import { IconPin, IconSearch } from "./icons";
 import { THEME_CHANGE } from "./theme";
 import {
   hasOpenSignalSession,
@@ -535,7 +535,7 @@ export function ChatView() {
                 .trim()}
             </span>
           </span>
-          <IconSparkle className="dm-pin-bar-icon" />
+          <IconPin className="dm-pin-bar-icon" />
         </button>
       ) : null}
 
