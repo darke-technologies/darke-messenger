@@ -2,19 +2,19 @@ export const THEME_CHANGE = "darke-theme";
 const STORAGE_KEY = "darke.theme";
 
 export const THEME_OPTIONS = [
-  { id: "gray", label: "Black / Gray", hex: "#c4c4c4" },
-  { id: "cyan", label: "Cyan", hex: "#00c8d6" },
-  { id: "ice", label: "Ice", hex: "#7a9eb0" },
-  { id: "blue", label: "Blue", hex: "#5d7ea8" },
-  { id: "indigo", label: "Indigo", hex: "#6a70a3" },
-  { id: "purple", label: "Purple", hex: "#7e6ea8" },
-  { id: "violet", label: "Violet", hex: "#8f6fa0" },
-  { id: "pink", label: "Pink", hex: "#b07a8c" },
-  { id: "red", label: "Red", hex: "#b85c5c" },
-  { id: "orange", label: "Orange", hex: "#c07a4c" },
-  { id: "amber", label: "Amber", hex: "#c49a52" },
-  { id: "green", label: "Green", hex: "#4e9a68" },
-  { id: "teal", label: "Teal", hex: "#3d9a8c" },
+  { id: "gray", label: "Black / Gray", hex: "#8e8e93" },
+  { id: "cyan", label: "Cyan", hex: "#00d4ff" },
+  { id: "ice", label: "Ice", hex: "#64d2ff" },
+  { id: "blue", label: "Blue", hex: "#0a84ff" },
+  { id: "indigo", label: "Indigo", hex: "#5e5ce6" },
+  { id: "purple", label: "Purple", hex: "#bf5af2" },
+  { id: "violet", label: "Violet", hex: "#da8fff" },
+  { id: "pink", label: "Pink", hex: "#ff375f" },
+  { id: "red", label: "Red", hex: "#ff453a" },
+  { id: "orange", label: "Orange", hex: "#ff6b00" },
+  { id: "amber", label: "Amber", hex: "#ff9f0a" },
+  { id: "green", label: "Green", hex: "#30d158" },
+  { id: "teal", label: "Teal", hex: "#00c7be" },
 ] as const;
 
 export type ThemeId = (typeof THEME_OPTIONS)[number]["id"];
@@ -104,8 +104,14 @@ export function applyAccentVars(id: ThemeId, root: HTMLElement = document.docume
       b: Math.round(b * 0.1),
     }),
   );
-  const bubbleFrom = scaleToLuminance(r, g, b, 0.22);
-  const bubbleTo = scaleToLuminance(r, g, b, 0.11);
+  const sourceL = relativeLuminance(r, g, b);
+  const bubbleFrom =
+    sourceL > 0.38 ? scaleToLuminance(r, g, b, 0.32) : { r, g, b };
+  const bubbleTo = {
+    r: Math.round(bubbleFrom.r * 0.52),
+    g: Math.round(bubbleFrom.g * 0.48),
+    b: Math.round(bubbleFrom.b * 0.45),
+  };
   root.style.setProperty("--hud-bubble-from", toHex(bubbleFrom));
   root.style.setProperty("--hud-bubble-to", toHex(bubbleTo));
 }

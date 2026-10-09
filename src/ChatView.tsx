@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage, type ChatPerson } from "./ChatMessage";
@@ -44,6 +44,7 @@ import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
 import type { TeamMovePreview } from "./teamService";
 import { blockPeer, isPeerBlocked } from "./blockedPeers";
 import { IconSearch } from "./icons";
+import { THEME_CHANGE } from "./theme";
 import {
   hasOpenSignalSession,
   initializeX3DHSession,
@@ -332,6 +333,37 @@ export function ChatView() {
       (msg.body || msg.fileName || "").toLowerCase().includes(q),
     );
   }, [active, chatQuery]);
+
+  useLayoutEffect(() => {
+    const root = streamRef.current;
+    if (!root || viewTab !== "messages") return;
+
+    const paint = () => {
+      const box = root.getBoundingClientRect();
+      const span = Math.max(box.height, 1);
+      root.querySelectorAll<HTMLElement>(".dm-bubble.is-sent").forEach((el) => {
+        const top = el.getBoundingClientRect().top;
+        el.style.backgroundImage =
+          "linear-gradient(180deg, var(--hud-bubble-from) 0%, var(--hud-bubble-to) 100%)";
+        el.style.backgroundRepeat = "no-repeat";
+        el.style.backgroundSize = `100% ${span}px`;
+        el.style.backgroundPosition = `center ${box.top - top}px`;
+      });
+    };
+
+    paint();
+    root.addEventListener("scroll", paint, { passive: true });
+    window.addEventListener("resize", paint);
+    window.addEventListener(THEME_CHANGE, paint);
+    const ro = new ResizeObserver(paint);
+    ro.observe(root);
+    return () => {
+      root.removeEventListener("scroll", paint);
+      window.removeEventListener("resize", paint);
+      window.removeEventListener(THEME_CHANGE, paint);
+      ro.disconnect();
+    };
+  }, [active?.id, active?.messages.length, viewTab]);
 
   useEffect(() => {
     if (!searchOpen || chatQuery.trim().length < 2) return;

@@ -15604,7 +15604,7 @@ html[data-theme="hud"] .go-btn {
 }
 
 html[data-theme="hud"] .settings-accent-swatch {
-  border-radius: 2px;
+  border-radius: 50%;
 }
 
 .settings-accent-picks {
@@ -15614,26 +15614,31 @@ html[data-theme="hud"] .settings-accent-swatch {
 }
 
 .settings-accent-swatch {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-  background: var(--swatch);
+  border: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      rgba(255, 255, 255, 0.42),
+      transparent 46%
+    ),
+    var(--swatch);
   cursor: pointer;
 }
 
 .settings-accent-swatch:hover {
   transform: none;
   outline: none;
-  box-shadow: 0 0 0 1px var(--swatch);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
 }
 
 .settings-accent-swatch.is-on {
   box-shadow:
-    0 0 0 2px #01060a,
-    0 0 0 4px var(--swatch),
-    var(--hud-glow);
+    0 0 0 2px #09090b,
+    0 0 0 4px #f4f4f5;
 }
 
 .idle-lock {
@@ -23918,7 +23923,6 @@ h3.chat-settings-label {
   width: fit-content;
   max-width: 100%;
   padding: 8px 12px 6px;
-  overflow: hidden;
   border-radius: 16px;
   font-size: 14px;
   font-weight: 400;
@@ -23929,11 +23933,16 @@ h3.chat-settings-label {
 .dm-pane.is-direct .dm-bubble p {
   display: block;
   margin: 0;
-  overflow: hidden;
   font-size: 14px;
   font-weight: 400;
   line-height: 1.45;
   color: inherit;
+}
+
+.dm-pane.is-direct .dm-bubble p::after {
+  content: "";
+  display: table;
+  clear: both;
 }
 
 .dm-pane.is-direct .dm-bubble.is-received {
@@ -23943,11 +23952,12 @@ h3.chat-settings-label {
 }
 
 .dm-pane.is-direct .dm-bubble.is-sent {
-  background: linear-gradient(
-    165deg,
-    var(--hud-bubble-from, #8a4a28) 0%,
-    var(--hud-bubble-to, #5c2e18) 100%
+  background-image: linear-gradient(
+    180deg,
+    var(--hud-bubble-from, #ff6b00) 0%,
+    var(--hud-bubble-to, #9a3200) 100%
   );
+  background-repeat: no-repeat;
   color: #f4f4f5;
   font-weight: 400;
   border-bottom-right-radius: 4px;
