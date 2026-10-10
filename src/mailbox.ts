@@ -656,43 +656,21 @@ async function loadAndPurgeMailbox(
     const envelope = parseSenderKeyEnvelope(item.meta.body || "");
     if (!envelope?.skdm) continue;
     await processRoomSenderDistribution(
-      envelope.groupId || item.meta.sessionKey,
-      envelope.sender || item.row.sender_username,
+      envelope.groupId,
+      envelope.sender,
       envelope.skdm,
     );
-    if (item.meta.sessionKey && item.meta.sessionKey !== envelope.groupId) {
-      await processRoomSenderDistribution(
-        item.meta.sessionKey,
-        envelope.sender || item.row.sender_username,
-        envelope.skdm,
-      );
-    }
   }
 
   for (const item of deferred) {
     if (item.meta.kind !== "room") continue;
     try {
-      let opened = await unwrapRoomSenderKeyPayload(
-        item.meta.sessionKey,
-        item.row.sender_username,
+      const envelope = parseSenderKeyEnvelope(item.meta.body || "");
+      const opened = await unwrapRoomSenderKeyPayload(
+        envelope?.groupId || item.meta.sessionKey,
+        envelope?.sender || item.row.sender_username,
         item.meta.body || "",
       );
-      if (!opened) {
-        await initializeX3DHSession(item.row.sender_username).catch(() => false);
-        const envelope = parseSenderKeyEnvelope(item.meta.body || "");
-        if (envelope?.skdm) {
-          await processRoomSenderDistribution(
-            envelope.groupId || item.meta.sessionKey,
-            envelope.sender || item.row.sender_username,
-            envelope.skdm,
-          );
-        }
-        opened = await unwrapRoomSenderKeyPayload(
-          item.meta.sessionKey,
-          item.row.sender_username,
-          item.meta.body || "",
-        );
-      }
       if (!opened) continue;
       const inner = parseMailboxPlain(opened);
       claimedMailboxIds.add(item.row.id);

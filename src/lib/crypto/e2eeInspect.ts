@@ -115,6 +115,27 @@ export function inspectRelayInsert(opts: {
   console.info(TAG, opts.kind === "skdm" ? "SKDM → relay" : "ROOM MSG → relay", report);
 }
 
+export function inspectRoomSenderKey(opts: {
+  role: "SENDER" | "RECIPIENT";
+  roomId: string;
+  senderHandle: string;
+  storeId: string;
+  hasPrivate?: boolean;
+  hasRecord?: boolean;
+}): void {
+  if (!e2eeInspectEnabled()) return;
+  const keyName = `${opts.roomId}:${opts.senderHandle}`;
+  const action =
+    opts.role === "SENDER"
+      ? "SENDER generating SKDM for keyName:"
+      : "RECIPIENT looking up SKDM for keyName:";
+  console.info("[e2ee-room]", action, keyName, {
+    storeId: opts.storeId,
+    hasPrivate: opts.hasPrivate ?? null,
+    hasRecord: opts.hasRecord ?? null,
+  });
+}
+
 export function inspectClientDecrypt(opts: {
   stage: "pairwise-mailbox" | "sender-key";
   sender: string;

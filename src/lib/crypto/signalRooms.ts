@@ -5,15 +5,17 @@ import {
   SenderKeyDistributionMessage,
   SenderKeyMessage,
   SenderKeyName,
+  SenderKeyRecord,
   type SenderKeyStore,
 } from "@wppconnect/libsignal-protocol";
 import { toSlug } from "../../slug";
+import { normalizeSessionKey } from "../../dmSessions";
 import {
   ensureLocalSignalIdentity,
   getSignalStore,
   signalAddress,
 } from "./signal";
-import { inspectClientDecrypt } from "./e2eeInspect";
+import { inspectClientDecrypt, inspectRoomSenderKey } from "./e2eeInspect";
 
 export type SenderKeyEnvelope = {
   v: 2;
@@ -92,12 +94,29 @@ function packedBytes(value: Uint8Array | ArrayBuffer): Uint8Array {
 }
 
 function canonGroupId(raw: string): string {
-  const hit = raw.match(/0x[0-9a-fA-F]{16,64}/);
-  return hit ? `0x${hit[0].slice(2).toUpperCase()}` : raw;
+  return normalizeSessionKey(raw) ?? raw.trim();
 }
 
-function senderKeyName(groupId: string, sender: string): SenderKeyName {
-  return new SenderKeyName(canonGroupId(groupId), signalAddress(sender));
+function canonSender(raw: string): string {
+  return toSlug(raw);
+}
+
+/** Uni-directional chain id: (roomId, senderHandle, deviceId). Never the recipient handle. */
+export function roomSenderKeyName(
+  groupId: string,
+  senderHandle: string,
+): SenderKeyName {
+  return new SenderKeyName(
+    canonGroupId(groupId),
+    signalAddress(canonSender(senderHandle)),
+  );
+}
+
+export function roomSenderKeyLabel(
+  groupId: string,
+  senderHandle: string,
+): string {
+  return `${canonGroupId(groupId)}:${canonSender(senderHandle)}`;
 }
 
 /**
@@ -166,10 +185,10 @@ function patchGroupCipherRatchet(): void {
   };
 }
 
-async function roomGroupSession(groupId: string, sender: string) {
+async function roomGroupSession(groupId: string, senderHandle: string) {
   patchGroupCipherRatchet();
   const store = await getSignalStore();
-  const name = senderKeyName(groupId, sender);
+  const name = roomSenderKeyName(groupId, senderHandle);
   const id = name.toString();
   const hit = roomSessions.get(id);
   if (hit) return { store, name, ...hit };
@@ -179,6 +198,16 @@ async function roomGroupSession(groupId: string, sender: string) {
   };
   roomSessions.set(id, session);
   return { store, name, ...session };
+}
+
+async function sendingRecordIsOurs(
+  store: Awaited<ReturnType<typeof getSignalStore>>,
+  name: SenderKeyName,
+): Promise<boolean> {
+  const record = await store.loadSenderKey(name);
+  if (record.isEmpty()) return false;
+  const state = record.getSenderKeyState() as SenderKeyStateLike;
+  return Boolean(state.signingKey?.private);
 }
 
 export function parseSenderKeyEnvelope(raw: string): SenderKeyEnvelope | null {
@@ -215,13 +244,24 @@ export async function createRoomSenderDistribution(
   groupId: string,
   sender: string,
 ): Promise<string | null> {
-  const who = toSlug(sender);
-  if (!groupId || !who) return null;
+  const who = canonSender(sender);
+  const roomId = canonGroupId(groupId);
+  if (!roomId || !who) return null;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return null;
-  const { name, builder } = await roomGroupSession(groupId, who);
+  const { store, name, builder } = await roomGroupSession(roomId, who);
   return withSkLock(name.toString(), async () => {
     try {
+      if (!(await sendingRecordIsOurs(store, name))) {
+        await store.storeSenderKey(name, new SenderKeyRecord());
+      }
+      inspectRoomSenderKey({
+        role: "SENDER",
+        roomId,
+        senderHandle: who,
+        storeId: name.toString(),
+        hasPrivate: true,
+      });
       const skdm = await builder.create(name);
       return bytesToB64(skdm.serialize());
     } catch {
@@ -235,13 +275,21 @@ export async function processRoomSenderDistribution(
   sender: string,
   distributionB64: string,
 ): Promise<boolean> {
-  const who = toSlug(sender);
-  if (!groupId || !who || !distributionB64) return false;
+  const who = canonSender(sender);
+  const roomId = canonGroupId(groupId);
+  if (!roomId || !who || !distributionB64) return false;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return false;
-  const { name, builder } = await roomGroupSession(groupId, who);
+  const { store, name, builder } = await roomGroupSession(roomId, who);
   return withSkLock(name.toString(), async () => {
     try {
+      inspectRoomSenderKey({
+        role: "RECIPIENT",
+        roomId,
+        senderHandle: who,
+        storeId: name.toString(),
+        hasRecord: !(await store.loadSenderKey(name)).isEmpty(),
+      });
       const skdm = SenderKeyDistributionMessage.deserialize(
         b64ToBytes(distributionB64),
       );
@@ -258,20 +306,31 @@ export async function wrapRoomSenderKeyPayload(
   sender: string,
   plaintext: string,
 ): Promise<string | null> {
-  const who = toSlug(sender);
+  const who = canonSender(sender);
+  const roomId = canonGroupId(groupId);
   const text = plaintext ?? "";
-  if (!groupId || !who || !text) return null;
+  if (!roomId || !who || !text) return null;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return null;
-  const { name, cipher, builder } = await roomGroupSession(groupId, who);
+  const { store, name, cipher, builder } = await roomGroupSession(roomId, who);
   return withSkLock(name.toString(), async () => {
     try {
+      if (!(await sendingRecordIsOurs(store, name))) {
+        await store.storeSenderKey(name, new SenderKeyRecord());
+      }
+      inspectRoomSenderKey({
+        role: "SENDER",
+        roomId,
+        senderHandle: who,
+        storeId: name.toString(),
+        hasPrivate: true,
+      });
       const skdm = await builder.create(name);
       const packed = await cipher.encrypt(new TextEncoder().encode(text));
       const envelope: SenderKeyEnvelope = {
         v: 2,
         proto: "signal-sk",
-        groupId: canonGroupId(groupId),
+        groupId: roomId,
         sender: who,
         body: bytesToB64(packedBytes(packed)),
         skdm: bytesToB64(skdm.serialize()),
@@ -290,32 +349,36 @@ export async function unwrapRoomSenderKeyPayload(
   payload: string,
 ): Promise<string | null> {
   if (!isSignalSenderKeyCiphertext(payload)) return null;
-  const who = toSlug(sender);
-  if (!groupId || !who) return null;
+  const parsed = parseSenderKeyEnvelope(payload);
+  if (!parsed) return null;
+  const who = canonSender(parsed.sender || sender);
+  const roomId = canonGroupId(parsed.groupId || groupId);
+  if (!roomId || !who) return null;
   try {
-    const parsed = parseSenderKeyEnvelope(payload);
-    if (!parsed) return null;
-    const from = parsed.sender ? toSlug(parsed.sender) : who;
-    const ids = [...new Set([groupId, parsed.groupId].filter(Boolean))];
-    let text: string | null = null;
-    for (const gid of ids) {
-      const { name, cipher, builder } = await roomGroupSession(gid, from);
-      text = await withSkLock(name.toString(), async () => {
-        try {
-          if (parsed.skdm) {
-            const skdm = SenderKeyDistributionMessage.deserialize(
-              b64ToBytes(parsed.skdm),
-            );
-            await builder.process(name, skdm);
-          }
-          const plain = await cipher.decrypt(b64ToBytes(parsed.body));
-          return new TextDecoder().decode(packedBytes(plain));
-        } catch {
-          return null;
+    const { store, name, cipher, builder } = await roomGroupSession(roomId, who);
+    const text = await withSkLock(name.toString(), async () => {
+      try {
+        if (parsed.skdm) {
+          const skdm = SenderKeyDistributionMessage.deserialize(
+            b64ToBytes(parsed.skdm),
+          );
+          await builder.process(name, skdm);
         }
-      });
-      if (text) break;
-    }
+        const record = await store.loadSenderKey(name);
+        inspectRoomSenderKey({
+          role: "RECIPIENT",
+          roomId,
+          senderHandle: who,
+          storeId: name.toString(),
+          hasRecord: !record.isEmpty(),
+        });
+        if (record.isEmpty()) return null;
+        const plain = await cipher.decrypt(b64ToBytes(parsed.body));
+        return new TextDecoder().decode(packedBytes(plain));
+      } catch {
+        return null;
+      }
+    });
     inspectClientDecrypt({
       stage: "sender-key",
       sender: who,
