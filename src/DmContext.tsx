@@ -1116,7 +1116,10 @@ export function DmProvider({
             (row) => threadIsRoom(row) && row.sessionKey === key,
           );
           if (!found || !isChatOwner(found, slug)) continue;
-          const admitted = addMembersToChat(found, [sender], slug);
+          const admitted = {
+            ...addMembersToChat(found, [sender], slug),
+            peerUsername: found.peerUsername || sender,
+          };
           next = next.map((row) => (row.id === found.id ? admitted : row));
           void shareRoomSenderKey(admitted, [sender]);
           continue;

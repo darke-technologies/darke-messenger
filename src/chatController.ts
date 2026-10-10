@@ -159,7 +159,12 @@ export function addMembersToChat(
     accepted.push(handle);
     existing.add(handle);
   }
-  if (accepted.length === 0) return thread;
+  if (accepted.length === 0) {
+    if (threadIsRoom(thread) && !thread.peerUsername && handles[0]) {
+      return { ...thread, peerUsername: handles[0] };
+    }
+    return thread;
+  }
   let guests = upsertChatGuest(thread.chatGuests ?? thread.invitedHandles, "");
   for (const handle of accepted) {
     guests = upsertChatGuest(guests, handle, "handle");

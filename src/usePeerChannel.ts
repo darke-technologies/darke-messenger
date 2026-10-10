@@ -73,10 +73,29 @@ function parseTypingInner(raw: string): TypingInner | null {
   }
 }
 
+function peerList(
+  peerUsername: string | string[] | null | undefined,
+  self: string,
+): string[] {
+  const raw = Array.isArray(peerUsername)
+    ? peerUsername
+    : peerUsername
+      ? [peerUsername]
+      : [];
+  const skip = new Set(["", self, "room", "guest", "peer", "__self__"]);
+  const out: string[] = [];
+  for (const row of raw) {
+    const handle = toSlug(row);
+    if (!handle || skip.has(handle) || out.includes(handle)) continue;
+    out.push(handle);
+  }
+  return out;
+}
+
 export function usePeerChannel(
   sessionKey: string | null,
   peerState: PeerConnectionState,
-  peerUsername?: string | null,
+  peerUsername?: string | string[] | null,
   selfUsername?: string | null,
 ): PeerChannel {
   const [connectionState, setConnectionState] =
@@ -88,13 +107,16 @@ export function usePeerChannel(
   const typingHandlers = useRef(new Set<(frame: TypingFrame) => void>());
   const pinHandlers = useRef(new Set<(event: ThreadPinEvent) => void>());
   const sessionRef = useRef(sessionKey);
-  const peerRef = useRef(peerUsername ?? null);
+  const peerRef = useRef<string[]>([]);
   const selfRef = useRef(selfUsername ?? null);
-  const realtimeRef = useRef<RealtimeChannel | null>(null);
+  const realtimeRef = useRef<Map<string, RealtimeChannel>>(new Map());
   const subscribedRef = useRef(false);
+  const self = toSlug(selfUsername ?? "");
+  const peers = peerList(peerUsername, self);
+  const peerKey = peers.join(",");
   sessionRef.current = sessionKey;
-  peerRef.current = peerUsername ?? null;
   selfRef.current = selfUsername ?? null;
+  peerRef.current = peers;
 
   useEffect(() => {
     setConnectionState(peerState);
@@ -102,69 +124,74 @@ export function usePeerChannel(
   }, [peerState, sessionKey]);
 
   useEffect(() => {
-    const peer = toSlug(peerUsername ?? "");
-    const self = toSlug(selfUsername ?? "");
-    if (!peer || !self || peer === self) {
-      realtimeRef.current = null;
+    if (!self || !peers.length) {
+      realtimeRef.current = new Map();
       subscribedRef.current = false;
       return;
     }
-    const channel = supabase.channel(typingTopic(self, peer), {
-      config: { broadcast: { ack: false, self: false } },
-    });
-    async function openEnvelope(ct: string) {
-      if (!ct || !isSignalV2Ciphertext(ct)) return null;
-      return unwrapTextPayload(peer, ct);
+    const channels = new Map<string, RealtimeChannel>();
+    let live = 0;
+    for (const peer of peers) {
+      const channel = supabase.channel(typingTopic(self, peer), {
+        config: { broadcast: { ack: false, self: false } },
+      });
+      async function openEnvelope(ct: string) {
+        if (!ct || !isSignalV2Ciphertext(ct)) return null;
+        return unwrapTextPayload(peer, ct);
+      }
+      channel.on(
+        "broadcast",
+        { event: "typing" },
+        (msg: { payload?: { ct?: unknown } }) => {
+          const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
+          void (async () => {
+            const opened = await openEnvelope(ct);
+            if (!opened) return;
+            const inner = parseTypingInner(opened);
+            if (!inner) return;
+            const frame: TypingFrame = { type: inner.t, handle: peer };
+            typingHandlers.current.forEach((handler) => handler(frame));
+          })();
+        },
+      );
+      channel.on(
+        "broadcast",
+        { event: "pin" },
+        (msg: { payload?: { ct?: unknown } }) => {
+          const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
+          void (async () => {
+            const opened = await openEnvelope(ct);
+            if (!opened) return;
+            const inner = parseMailboxPlain(opened);
+            if (!inner || inner.kind !== "pin") return;
+            const event: ThreadPinEvent = {
+              pinned: inner.pinned === true,
+              by: peer,
+              sessionKey: inner.sessionKey,
+              messageId: inner.messageId,
+              pinUntil: inner.pinUntil,
+              snippet: inner.body,
+              pinAt: inner.pinAt,
+            };
+            pinHandlers.current.forEach((handler) => handler(event));
+          })();
+        },
+      );
+      void channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") live += 1;
+        subscribedRef.current = live > 0;
+      });
+      channels.set(peer, channel);
     }
-    channel.on(
-      "broadcast",
-      { event: "typing" },
-      (msg: { payload?: { ct?: unknown } }) => {
-        const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
-        void (async () => {
-          const opened = await openEnvelope(ct);
-          if (!opened) return;
-          const inner = parseTypingInner(opened);
-          if (!inner) return;
-          const frame: TypingFrame = { type: inner.t, handle: peer };
-          typingHandlers.current.forEach((handler) => handler(frame));
-        })();
-      },
-    );
-    channel.on(
-      "broadcast",
-      { event: "pin" },
-      (msg: { payload?: { ct?: unknown } }) => {
-        const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
-        void (async () => {
-          const opened = await openEnvelope(ct);
-          if (!opened) return;
-          const inner = parseMailboxPlain(opened);
-          if (!inner || inner.kind !== "pin") return;
-          const event: ThreadPinEvent = {
-            pinned: inner.pinned === true,
-            by: peer,
-            sessionKey: inner.sessionKey,
-            messageId: inner.messageId,
-            pinUntil: inner.pinUntil,
-            snippet: inner.body,
-            pinAt: inner.pinAt,
-          };
-          pinHandlers.current.forEach((handler) => handler(event));
-        })();
-      },
-    );
-    subscribedRef.current = false;
-    void channel.subscribe((status) => {
-      subscribedRef.current = status === "SUBSCRIBED";
-    });
-    realtimeRef.current = channel;
+    realtimeRef.current = channels;
     return () => {
       subscribedRef.current = false;
-      realtimeRef.current = null;
-      void supabase.removeChannel(channel);
+      realtimeRef.current = new Map();
+      for (const channel of channels.values()) {
+        void supabase.removeChannel(channel);
+      }
     };
-  }, [peerUsername, selfUsername]);
+  }, [peerKey, self]);
 
   const transmit = useCallback(
     (payload: string) => {
@@ -202,29 +229,33 @@ export function usePeerChannel(
       transmit(encodeTyping(kind, who));
     }
     const key = sessionRef.current?.trim() || "";
-    const peer = toSlug(peerRef.current ?? "");
-    const live = realtimeRef.current;
-    if (!peer || !live) return;
+    const peers = peerRef.current;
+    const channels = realtimeRef.current;
+    if (!peers.length || !channels.size) return;
     void (async () => {
-      await initializeX3DHSession(peer);
-      const envelope = await wrapTextPayload(
-        peer,
-        JSON.stringify({
-          v: 2,
-          kind: "typing",
-          t: kind,
-          s: key || peer,
-        } satisfies TypingInner),
-      );
-      if (!envelope || !isSignalV2Ciphertext(envelope)) return;
       if (!subscribedRef.current) {
         await new Promise((resolve) => window.setTimeout(resolve, 250));
       }
-      await live.send({
-        type: "broadcast",
-        event: "typing",
-        payload: { ct: envelope },
-      });
+      for (const peer of peers) {
+        const live = channels.get(peer);
+        if (!live) continue;
+        await initializeX3DHSession(peer);
+        const envelope = await wrapTextPayload(
+          peer,
+          JSON.stringify({
+            v: 2,
+            kind: "typing",
+            t: kind,
+            s: key || peer,
+          } satisfies TypingInner),
+        );
+        if (!envelope || !isSignalV2Ciphertext(envelope)) continue;
+        await live.send({
+          type: "broadcast",
+          event: "typing",
+          payload: { ct: envelope },
+        });
+      }
     })();
   }, [transmit]);
 
@@ -247,33 +278,37 @@ export function usePeerChannel(
       snippet?: string;
       pinAt?: number;
     }) => {
-      const peer = toSlug(peerRef.current ?? "");
-      const live = realtimeRef.current;
-      if (!peer || !live || !event.messageId) return;
+      const peers = peerRef.current;
+      const channels = realtimeRef.current;
+      if (!peers.length || !channels.size || !event.messageId) return;
       void (async () => {
-        await initializeX3DHSession(peer);
-        const envelope = await wrapTextPayload(
-          peer,
-          JSON.stringify({
-            v: 2,
-            sessionKey: event.sessionKey,
-            kind: "pin",
-            messageId: event.messageId,
-            body: event.snippet,
-            pinned: event.pinned === true,
-            pinUntil: event.pinUntil ?? null,
-            pinAt: event.pinAt,
-          }),
-        );
-        if (!envelope || !isSignalV2Ciphertext(envelope)) return;
         if (!subscribedRef.current) {
           await new Promise((resolve) => window.setTimeout(resolve, 250));
         }
-        await live.send({
-          type: "broadcast",
-          event: "pin",
-          payload: { ct: envelope },
-        });
+        for (const peer of peers) {
+          const live = channels.get(peer);
+          if (!live) continue;
+          await initializeX3DHSession(peer);
+          const envelope = await wrapTextPayload(
+            peer,
+            JSON.stringify({
+              v: 2,
+              sessionKey: event.sessionKey,
+              kind: "pin",
+              messageId: event.messageId,
+              body: event.snippet,
+              pinned: event.pinned === true,
+              pinUntil: event.pinUntil ?? null,
+              pinAt: event.pinAt,
+            }),
+          );
+          if (!envelope || !isSignalV2Ciphertext(envelope)) continue;
+          await live.send({
+            type: "broadcast",
+            event: "pin",
+            payload: { ct: envelope },
+          });
+        }
       })();
     },
     [],

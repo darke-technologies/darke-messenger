@@ -23,6 +23,7 @@ import {
   nodeGreetingAlreadyRevealed,
   sidebarPeerHandle,
   messageBubbleCluster,
+  roomRecipientHandles,
 } from "./chatService";
 import {
   CHAT_FOCUS_EVENT,
@@ -81,18 +82,22 @@ export function ChatView() {
     joinError,
     deleteThread,
   } = useChat();
+  const ephemeralPeers = useMemo(() => {
+    if (!active) return [] as string[];
+    if (threadIsRoom(active) || threadIsGroup(active)) {
+      return roomRecipientHandles(active, slug);
+    }
+    const one =
+      sidebarPeerHandle(active, slug) ||
+      active.peerUsername ||
+      active.handle ||
+      "";
+    return one ? [one] : [];
+  }, [active, slug]);
   const channel = usePeerChannel(
     active?.sessionKey ?? null,
     active?.connectionState ?? "WAITING FOR PEER",
-    (
-      (active ? sidebarPeerHandle(active, slug) : null) ||
-      active?.peerUsername ||
-      active?.handle ||
-      ""
-    )
-      .replace(/^@/, "")
-      .trim()
-      .toLowerCase() || null,
+    ephemeralPeers,
     slug,
   );
   const live = channel.connectionState;

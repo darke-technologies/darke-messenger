@@ -55,7 +55,7 @@ export function ChatSidebar({
   } = useDm();
   const localChat = useLocalChat(slug);
   const [newChatOpen, setNewChatOpen] = useState(false);
-  const [lane, setLane] = useState<"messages" | "rooms">("messages");
+  const [lane, setLane] = useState<"all" | "messages" | "rooms">("all");
   const [menu, setMenu] = useState<{
     chatId: string;
     x: number;
@@ -94,9 +94,11 @@ export function ChatSidebar({
   const people = usePersonDirectory(directoryHandles);
   void people.version;
 
-  const visibleRecent = recent.filter((thread) =>
-    lane === "rooms" ? threadIsRoom(thread) : !threadIsGroup(thread),
-  );
+  const visibleRecent = recent.filter((thread) => {
+    if (lane === "rooms") return threadIsRoom(thread);
+    if (lane === "messages") return !threadIsGroup(thread);
+    return true;
+  });
 
   function renderChatRow(thread: DmThread) {
     const label = sidebarRowLabel(thread, slug, localChat.peek(thread.id));
@@ -171,6 +173,7 @@ export function ChatSidebar({
         <div className="dm-nav-stream" role="tablist" aria-label="Chat lists">
           {(
             [
+              ["all", "ALL"],
               ["messages", "MESSAGES"],
               ["rooms", "ROOMS"],
             ] as const
@@ -194,7 +197,11 @@ export function ChatSidebar({
         <div className="dm-nav-list">
           {visibleRecent.length === 0 ? (
             <p className="muted msg-nav-empty">
-              {lane === "rooms" ? "No rooms yet." : "No chats yet."}
+              {lane === "rooms"
+                ? "No rooms yet."
+                : lane === "messages"
+                  ? "No chats yet."
+                  : "No conversations yet."}
             </p>
           ) : (
             visibleRecent.map((thread) => renderChatRow(thread))
