@@ -389,7 +389,11 @@ function AppBody({ initialPath }: { initialPath: string }) {
             const path = window.location.pathname;
             captureJoinIntent();
             if (isTeamHandlePath(path) || path.startsWith("/teams")) {
-              // Keep /teams/[slug] and /join/[slug].
+              window.history.replaceState(
+                null,
+                "",
+                `/app${window.location.hash || ""}`,
+              );
             } else if (
               isP2pJoinPath(path) ||
               path.startsWith("/messages")

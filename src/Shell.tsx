@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IdleLockOverlay } from "./IdleLockOverlay";
 import { IconBell, IconBookOpen, IconHome, IconPanelLeft, IconPeople, IconSettings } from "./icons";
 import { GamesPane } from "./GamesPane";
@@ -31,7 +31,6 @@ import {
   STARS_BACKGROUND_CHANGE,
   setShowWelcome,
 } from "./welcomePrefs";
-import { CreateWorkspaceModal, WorkspaceCreateFlows } from "./ProjectsNav";
 import { openProUpgradeModal } from "./useUpgradeModalStore";
 import { WorkspaceProvider, useWorkspaces } from "./WorkspaceContext";
 import {
@@ -42,25 +41,8 @@ import {
   type Section,
 } from "./navSession";
 import { InviteChannelHost } from "./SidebarHeader";
-import { DmProvider, useDm } from "./DmContext";
-import {
-  findTeam,
-  isP2pJoinPath,
-  isTeamHandlePath,
-  loadLastWorkspaceId,
-  openTeamCenter,
-  parseTeamRouteParam,
-  PERSONAL_WORKSPACE_ID,
-  resolveTeamRoute,
-  saveLastWorkspaceId,
-  TEAM_CENTER_EVENT,
-  TEAM_CHANGE_EVENT,
-  TEAM_HUB_EVENT,
-  teamCenterPath,
-  teamsHubPath,
-} from "./teamContainer";
-import { TeamWorkspaceProvider } from "./teamWorkspace";
-import { TeamsDashboard } from "./TeamsDashboard";
+import { DmProvider } from "./DmContext";
+import { isP2pJoinPath } from "./teamContainer";
 import {
   consumeChatLinkCopiedToast,
   COPY_LINK_TOAST_EVENT,
@@ -79,7 +61,6 @@ import {
   WORKSPACE_INTENT_EVENT,
 } from "./feedIntent";
 import { toSlug } from "./slug";
-import { TeamCommandCenter } from "./TeamCommandCenter";
 
 export type { Section } from "./navSession";
 
@@ -259,65 +240,11 @@ function ComposeSection() {
   return <MessagesPane />;
 }
 
-function initialWorkspace(slug: string): {
-  section: Section;
-  teamId: string;
-  workspaceId: string;
-  hubOpen: boolean;
-  restoreTeamUrl: string | null;
-} {
+function initialWorkspace(slug: string): { section: Section } {
   if (typeof window === "undefined") {
-    return {
-      section: "compose",
-      teamId: "",
-      workspaceId: PERSONAL_WORKSPACE_ID,
-      hubOpen: false,
-      restoreTeamUrl: null,
-    };
+    return { section: "compose" };
   }
-  const path = window.location.pathname;
-  const param = parseTeamRouteParam(path);
-  if (param) {
-    const resolved = resolveTeamRoute(slug, param);
-    if (resolved.team) {
-      return {
-        section: "teams",
-        teamId: resolved.team.id,
-        workspaceId: resolved.team.id,
-        hubOpen: false,
-        restoreTeamUrl: null,
-      };
-    }
-  }
-  if (path === "/teams" || path === "/teams/") {
-    return {
-      section: "teams",
-      teamId: "",
-      workspaceId: PERSONAL_WORKSPACE_ID,
-      hubOpen: true,
-      restoreTeamUrl: null,
-    };
-  }
-  const saved = loadLastWorkspaceId(slug);
-  if (saved && saved !== PERSONAL_WORKSPACE_ID) {
-    const team = findTeam(slug, saved);
-    if (team) {
-      return {
-        section: "teams",
-        teamId: team.id,
-        workspaceId: team.id,
-        hubOpen: false,
-        restoreTeamUrl: teamCenterPath(team.slug),
-      };
-    }
-  }
-  return {
-    section: initialSection(slug),
-    teamId: "",
-    workspaceId: PERSONAL_WORKSPACE_ID,
-    hubOpen: false,
-    restoreTeamUrl: null,
-  };
+  return { section: initialSection(slug) };
 }
 
 function MessengerNavBlock({
@@ -416,40 +343,17 @@ function NavPersistence({
 }
 
 function WorkspaceIntentChat() {
-  const { workspaces, channelsByWorkspace } = useWorkspaces();
-  const { openTeamChat } = useDm();
-
-  useEffect(() => {
-    const onOpen = (event: Event) => {
-      const id = (event as CustomEvent<{ id: string }>).detail?.id;
-      if (!id) return;
-      const ws = workspaces.find((row) => row.id === id);
-      if (!ws) return;
-      const ch = channelsByWorkspace[id]?.[0];
-      openTeamChat(
-        { id: ws.id, name: ws.name, slug: ws.slug },
-        ch ? { id: ch.id, name: ch.name, slug: ch.slug } : null,
-      );
-    };
-    window.addEventListener(WORKSPACE_INTENT_EVENT, onOpen);
-    return () => window.removeEventListener(WORKSPACE_INTENT_EVENT, onOpen);
-  }, [workspaces, channelsByWorkspace, openTeamChat]);
-
   return null;
 }
 
 export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugChanged }: Props) {
   const boot = initialWorkspace(slug);
   const [section, setSection] = useState<Section>(() => boot.section);
-  const [teamId, setTeamId] = useState(() => boot.teamId);
-  const [workspaceId, setWorkspaceId] = useState(() => boot.workspaceId);
-  const [hubOpen, setHubOpen] = useState(() => boot.hubOpen);
   const [bunkerCollapsed, setBunkerCollapsed] = useState(() =>
     initialBunkerCollapsed(slug),
   );
   const [inviteChannelId, setInviteChannelId] = useState<string | null>(null);
   const [peekUsername, setPeekUsername] = useState<string | null>(null);
-  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [welcomeReady, setWelcomeReady] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
@@ -469,8 +373,7 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
     section === "downloads" ||
     section === "search" ||
     section === "home" ||
-    section === "workspace" ||
-    section === "teams"
+    section === "workspace"
       ? "messenger"
       : null;
 
@@ -480,42 +383,18 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const boot = initialWorkspace(slug);
-    if (boot.restoreTeamUrl && window.location.pathname !== boot.restoreTeamUrl) {
+    const path = window.location.pathname;
+    if (path.startsWith("/teams") || /^\/join\/[^/]+/.test(path)) {
       window.history.replaceState(
         null,
         "",
-        `${boot.restoreTeamUrl}${window.location.search || ""}`,
+        `/app${window.location.hash || ""}`,
       );
     }
   }, [slug]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (section === "teams") {
-      if (hubOpen || !teamId) {
-        if (window.location.pathname !== teamsHubPath()) {
-          window.history.replaceState(
-            null,
-            "",
-            `${teamsHubPath()}${window.location.search || ""}`,
-          );
-        }
-        return;
-      }
-      const resolved = resolveTeamRoute(slug, teamId);
-      if (resolved.team) {
-        const want = teamCenterPath(resolved.team.slug);
-        if (window.location.pathname !== want) {
-          window.history.replaceState(
-            null,
-            "",
-            `${want}${window.location.search || ""}`,
-          );
-        }
-      }
-      return;
-    }
     if (section === "manual") {
       if (!window.location.pathname.startsWith("/manual")) {
         window.history.replaceState(null, "", "/manual");
@@ -523,20 +402,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
       return;
     }
     if (section === "compose") {
-      if (workspaceId !== PERSONAL_WORKSPACE_ID) {
-        const team = findTeam(slug, workspaceId);
-        if (team) {
-          const want = teamCenterPath(team.slug);
-          if (window.location.pathname !== want) {
-            window.history.replaceState(
-              null,
-              "",
-              `${want}${window.location.search || ""}`,
-            );
-          }
-          return;
-        }
-      }
       const path = window.location.pathname;
       const onMessenger =
         path.startsWith("/app/chat") ||
@@ -566,7 +431,7 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
     if (window.location.pathname.startsWith("/manual")) {
       window.history.replaceState(null, "", "/");
     }
-  }, [section, teamId, slug, hubOpen, workspaceId]);
+  }, [section, slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -626,38 +491,12 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
   useEffect(() => {
     function onPop() {
       const path = window.location.pathname;
-      const param = parseTeamRouteParam(path);
-      if (path === "/teams" || path === "/teams/") {
-        setWorkspaceId(PERSONAL_WORKSPACE_ID);
-        setHubOpen(true);
-        setTeamId("");
-        setSection("teams");
-        return;
-      }
-      if (param || isTeamHandlePath(path)) {
-        const resolved = resolveTeamRoute(slug, param);
-        if (resolved.team) {
-          setTeamId(resolved.team.id);
-          setWorkspaceId(resolved.team.id);
-          setHubOpen(false);
-          if (resolved.redirectTo) {
-            window.history.replaceState(
-              null,
-              "",
-              `${teamCenterPath(resolved.redirectTo)}${window.location.search || ""}`,
-            );
-          }
-        } else {
-          setTeamId(param ?? "");
-          setWorkspaceId(PERSONAL_WORKSPACE_ID);
-          setHubOpen(true);
-        }
-        setSection("teams");
+      if (path.startsWith("/teams") || /^\/join\/[^/]+/.test(path)) {
+        window.history.replaceState(null, "", "/app");
+        setSection("compose");
         return;
       }
       if (path.startsWith("/app")) {
-        setWorkspaceId(PERSONAL_WORKSPACE_ID);
-        setHubOpen(false);
         setSection("compose");
       }
     }
@@ -717,45 +556,20 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
       }
     };
     const goCompose = () => {
-      setWorkspaceId(PERSONAL_WORKSPACE_ID);
-      setHubOpen(false);
       setSection("compose");
     };
     const goWorkspace = () => {
-      setWorkspaceId(PERSONAL_WORKSPACE_ID);
-      setHubOpen(false);
       setSection("compose");
-    };
-    const goTeam = (event: Event) => {
-      const detail = (event as CustomEvent<{ teamId?: string; slug?: string }>)
-        .detail;
-      const resolved = resolveTeamRoute(slug, detail?.slug || detail?.teamId);
-      const id = resolved.team?.id || detail?.teamId;
-      if (!id) return;
-      setTeamId(id);
-      setWorkspaceId(id);
-      setHubOpen(false);
-      setSection("teams");
-    };
-    const goHub = () => {
-      setWorkspaceId(PERSONAL_WORKSPACE_ID);
-      setTeamId("");
-      setHubOpen(true);
-      setSection("teams");
     };
     window.addEventListener(FEED_INTENT_EVENT, goFeed);
     window.addEventListener(PROFILE_INTENT_EVENT, goProfile);
     window.addEventListener(COMPOSE_INTENT_EVENT, goCompose);
     window.addEventListener(WORKSPACE_INTENT_EVENT, goWorkspace);
-    window.addEventListener(TEAM_CENTER_EVENT, goTeam);
-    window.addEventListener(TEAM_HUB_EVENT, goHub);
     return () => {
       window.removeEventListener(FEED_INTENT_EVENT, goFeed);
       window.removeEventListener(PROFILE_INTENT_EVENT, goProfile);
       window.removeEventListener(COMPOSE_INTENT_EVENT, goCompose);
       window.removeEventListener(WORKSPACE_INTENT_EVENT, goWorkspace);
-      window.removeEventListener(TEAM_CENTER_EVENT, goTeam);
-      window.removeEventListener(TEAM_HUB_EVENT, goHub);
     };
   }, [slug]);
 
@@ -777,7 +591,7 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
 
   function openSideSection(id: Section) {
     const next =
-      id === "home" || id === "workspace" ? "compose" : id;
+      id === "home" || id === "workspace" || id === "teams" ? "compose" : id;
     setSection(next);
     if (typeof window === "undefined") return;
     if (next === "manual") {
@@ -785,8 +599,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
       return;
     }
     if (next === "compose") {
-      setWorkspaceId(PERSONAL_WORKSPACE_ID);
-      setHubOpen(false);
       window.history.replaceState(null, "", "/app");
       return;
     }
@@ -834,58 +646,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
     if (go) openSideSection(go);
   }
 
-  const [teamEpoch, setTeamEpoch] = useState(0);
-  useEffect(() => {
-    function sync() {
-      setTeamEpoch((n) => n + 1);
-    }
-    window.addEventListener(TEAM_CHANGE_EVENT, sync);
-    return () => window.removeEventListener(TEAM_CHANGE_EVENT, sync);
-  }, []);
-
-  const activeTeam =
-    workspaceId !== PERSONAL_WORKSPACE_ID
-      ? findTeam(slug, workspaceId)
-      : null;
-  void teamEpoch;
-
-  useEffect(() => {
-    saveLastWorkspaceId(slug, workspaceId);
-  }, [slug, workspaceId]);
-
-  const teamWorkspace = useMemo(
-    () => ({
-      workspaceId,
-      hubOpen,
-      activeTeam,
-      openHub: () => {
-        setWorkspaceId(PERSONAL_WORKSPACE_ID);
-        setTeamId("");
-        setHubOpen(true);
-        setSection("teams");
-        if (typeof window !== "undefined") {
-          window.history.pushState(null, "", teamsHubPath());
-        }
-      },
-      enterTeam: (team: { id: string; slug: string }) => {
-        setWorkspaceId(team.id);
-        setTeamId(team.id);
-        setHubOpen(false);
-        setSection("teams");
-        openTeamCenter(team);
-      },
-      enterPersonal: () => {
-        setWorkspaceId(PERSONAL_WORKSPACE_ID);
-        setHubOpen(false);
-        setSection("compose");
-        if (typeof window !== "undefined") {
-          window.history.pushState(null, "", "/app");
-        }
-      },
-    }),
-    [workspaceId, hubOpen, activeTeam],
-  );
-
   return (
     <NotificationsProvider>
     <ProfileEditContext.Provider
@@ -903,7 +663,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
     >
     <WorkspaceProvider slug={slug} profile={savedProfile}>
     <DmProvider slug={slug}>
-    <TeamWorkspaceProvider value={teamWorkspace}>
     <div className={`app-frame${section === "feed" || section === "settings" || section === "manual" ? " shell-web" : ""}`}>
       <CopyLinkToast />
       {nameBanner ? (
@@ -980,20 +739,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
           }}
         />
       ) : null}
-      {createWorkspaceOpen ? (
-        <CreateWorkspaceModal
-          onClose={() => setCreateWorkspaceOpen(false)}
-          onCreated={() => setSection("compose")}
-          onUpgrade={() => {
-            setCreateWorkspaceOpen(false);
-            openProUpgradeModal();
-          }}
-        />
-      ) : null}
-      <WorkspaceCreateFlows
-        onUpgrade={() => openProUpgradeModal()}
-        onOpened={() => setSection("compose")}
-      />
       <div
         className={`shell${panelMode ? " is-rail-off" : " is-panel-off"}${bunkerCollapsed && panelMode ? " is-bunker-collapsed" : ""}`}
       >
@@ -1072,7 +817,7 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
               <MessengerNavBlock
                 slug={slug}
                 onOpenWorkspace={() => setSection("compose")}
-                onJoin={() => setCreateWorkspaceOpen(true)}
+                onJoin={() => undefined}
                 onUpgrade={() => openProUpgradeModal()}
                 onOpenFeed={() => openSideSection("feed")}
                 onOpenCompose={() => openSideSection("compose")}
@@ -1143,21 +888,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
               <DownloadsView />
             ) : section === "search" ? (
               <ChatSearchView />
-            ) : section === "teams" && (hubOpen || !teamId) ? (
-              <TeamsDashboard slug={slug} />
-            ) : section === "teams" ? (
-              <TeamCommandCenter
-                slug={slug}
-                teamId={
-                  teamId ||
-                  resolveTeamRoute(
-                    slug,
-                    parseTeamRouteParam(window.location.pathname),
-                  ).team?.id ||
-                  ""
-                }
-                onBack={() => teamWorkspace.enterPersonal()}
-              />
             ) : section === "settings" ? (
               <SettingsPane
                 slug={slug}
@@ -1205,7 +935,6 @@ export function Shell({ slug, onSignedOut, onAborted, onAccountDeleted, onSlugCh
         />
       ) : null}
     </div>
-    </TeamWorkspaceProvider>
     </DmProvider>
     </WorkspaceProvider>
     </ProfileEditContext.Provider>

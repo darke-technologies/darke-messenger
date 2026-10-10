@@ -5,18 +5,10 @@ import { InviteLinkBar } from "./InviteLinkBar";
 import type { DarkeProfile } from "./profile";
 import { UserAvatar } from "./UserAvatar";
 import {
-  findTeam,
-  FREE_TEAM_SEATS,
-  teamSeatsUsed,
-} from "./teamContainer";
-import {
   STANDALONE_DIRECT_MAX,
   STANDALONE_GROUP_MAX,
   STANDALONE_GROUP_LIMIT_NOTE,
 } from "./chatService";
-import { useWorkspacesMaybe } from "./WorkspaceContext";
-import { isProPlan } from "./workspaces";
-import { openUpgradeModal } from "./useUpgradeModalStore";
 
 type InviteTab = "link" | "people";
 
@@ -29,9 +21,7 @@ export function InviteModal({
   requested = false,
   onRequest,
   memberCount = 1,
-  teamBound = false,
   isGroup = false,
-  teamId = null,
   slug = "",
   takenHandles = [],
   onAdd,
@@ -44,9 +34,7 @@ export function InviteModal({
   requested?: boolean;
   onRequest?: () => void;
   memberCount?: number;
-  teamBound?: boolean;
   isGroup?: boolean;
-  teamId?: string | null;
   slug?: string;
   takenHandles?: string[];
   onAdd?: (handle: string) => void;
@@ -55,21 +43,8 @@ export function InviteModal({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<DarkeProfile[]>([]);
   const [added, setAdded] = useState<string | null>(null);
-  const workspaces = useWorkspacesMaybe();
-  const pro = isProPlan(workspaces?.tier ?? "free");
-  const team = slug ? findTeam(slug, teamId) : null;
-  const currentMembers =
-    teamBound && team ? teamSeatsUsed(team) : Math.max(1, memberCount);
-  const full = Boolean(teamBound && !pro && currentMembers >= FREE_TEAM_SEATS);
-  const remaining =
-    teamBound && !pro ? Math.max(0, FREE_TEAM_SEATS - currentMembers) : null;
-  const nodeCap = teamBound
-    ? Number.POSITIVE_INFINITY
-    : isGroup
-      ? STANDALONE_GROUP_MAX
-      : STANDALONE_DIRECT_MAX;
-  const atNodeCap =
-    !teamBound && Number.isFinite(nodeCap) && memberCount >= nodeCap;
+  const nodeCap = isGroup ? STANDALONE_GROUP_MAX : STANDALONE_DIRECT_MAX;
+  const atNodeCap = Number.isFinite(nodeCap) && memberCount >= nodeCap;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -107,34 +82,13 @@ export function InviteModal({
     [slug, ...takenHandles].map((h) => h.replace(/^@/, "").trim().toLowerCase()),
   );
 
-  const capacityBanner =
-    remaining === null ? (
-      atNodeCap ? (
-        <p className="invite-capacity is-full">
-          {isGroup
-            ? STANDALONE_GROUP_LIMIT_NOTE
-            : `This chat has reached its ${nodeCap.toLocaleString()} participant limit.`}
-        </p>
-      ) : null
-    ) : full ? (
-      <p className="invite-capacity is-full">
-        TEAM seats reached ({currentMembers}/{FREE_TEAM_SEATS}).{" "}
-        <button
-          type="button"
-          className="invite-capacity-upgrade"
-          onClick={() => {
-            onClose();
-            openUpgradeModal("team");
-          }}
-        >
-          Upgrade Plan →
-        </button>
-      </p>
-    ) : (
-      <p className="invite-capacity">
-        TEAM seats available: {remaining} of {FREE_TEAM_SEATS}
-      </p>
-    );
+  const capacityBanner = atNodeCap ? (
+    <p className="invite-capacity is-full">
+      {isGroup
+        ? STANDALONE_GROUP_LIMIT_NOTE
+        : `This chat has reached its ${nodeCap.toLocaleString()} participant limit.`}
+    </p>
+  ) : null;
 
   return createPortal(
     <div
@@ -179,15 +133,11 @@ export function InviteModal({
                   shareLink={shareLink}
                   copied={copied}
                   onCopy={onCopy}
-                  disabled={full || atNodeCap}
+                  disabled={atNodeCap}
                   inputId="invite-join-link"
-                  showNote={!full && !atNodeCap}
+                  showNote={!atNodeCap}
                 />
-                {full ? (
-                  <p className="invite-capacity-hint">
-                    Upgrade your plan to invite additional members to this TEAM.
-                  </p>
-                ) : atNodeCap && !isGroup ? (
+                {atNodeCap && !isGroup ? (
                   <p className="invite-capacity-hint">
                     Remove someone before inviting another participant.
                   </p>
@@ -221,12 +171,6 @@ export function InviteModal({
         ) : (
           <>
             {capacityBanner}
-            {full ? (
-              <p className="invite-capacity-hint">
-                Upgrade to add a third TEAM seat. Existing TEAM members can still
-                join this node.
-              </p>
-            ) : null}
             <label className="members-search invite-people-search">
               <span className="sr-only">Find a DARKE user by username</span>
               <input
@@ -262,15 +206,6 @@ export function InviteModal({
                         disabled={already || atNodeCap}
                         onClick={() => {
                           if (atNodeCap) return;
-                          const id = handle.replace(/^@/, "").trim().toLowerCase();
-                          const onTeam = Boolean(
-                            team?.members.some((row) => row.handle === id),
-                          );
-                          if (teamBound && !pro && !onTeam && full) {
-                            onClose();
-                            openUpgradeModal("team");
-                            return;
-                          }
                           onAdd?.(handle);
                           setAdded(handle);
                           setQuery("");

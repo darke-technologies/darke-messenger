@@ -17,8 +17,10 @@ import {
   unwrapTextPayload,
   wrapTextPayload,
 } from "./lib/crypto/signal";
+import { parseMailboxPlain } from "./mailbox";
 import { supabase } from "./supabase";
 import { toSlug } from "./slug";
+import type { ThreadPinEvent } from "./dmSessions";
 
 /**
  * Local stand-in for a WebRTC DataChannel.
@@ -31,10 +33,19 @@ export type PeerChannel = {
   p2pLive: boolean;
   sendMessage: (payload: string, replyToMessageId?: string) => void;
   sendTyping: (kind: TypingKind, handle: string) => void;
+  sendPin: (event: {
+    sessionKey: string;
+    messageId: string;
+    pinned: boolean;
+    pinUntil?: number | null;
+    snippet?: string;
+    pinAt?: number;
+  }) => void;
   onMessage: (
     handler: (payload: string, replyToMessageId?: string) => void,
   ) => () => void;
   onTyping: (handler: (frame: TypingFrame) => void) => () => void;
+  onPin: (handler: (event: ThreadPinEvent) => void) => () => void;
   ingestRemote: (raw: string) => void;
 };
 
@@ -75,6 +86,7 @@ export function usePeerChannel(
     new Set<(payload: string, replyToMessageId?: string) => void>(),
   );
   const typingHandlers = useRef(new Set<(frame: TypingFrame) => void>());
+  const pinHandlers = useRef(new Set<(event: ThreadPinEvent) => void>());
   const sessionRef = useRef(sessionKey);
   const peerRef = useRef(peerUsername ?? null);
   const selfRef = useRef(selfUsername ?? null);
@@ -100,19 +112,45 @@ export function usePeerChannel(
     const channel = supabase.channel(typingTopic(self, peer), {
       config: { broadcast: { ack: false, self: false } },
     });
+    async function openEnvelope(ct: string) {
+      if (!ct || !isSignalV2Ciphertext(ct)) return null;
+      return unwrapTextPayload(peer, ct);
+    }
     channel.on(
       "broadcast",
       { event: "typing" },
       (msg: { payload?: { ct?: unknown } }) => {
         const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
-        if (!ct || !isSignalV2Ciphertext(ct)) return;
         void (async () => {
-          const opened = await unwrapTextPayload(peer, ct);
+          const opened = await openEnvelope(ct);
           if (!opened) return;
           const inner = parseTypingInner(opened);
           if (!inner) return;
           const frame: TypingFrame = { type: inner.t, handle: peer };
           typingHandlers.current.forEach((handler) => handler(frame));
+        })();
+      },
+    );
+    channel.on(
+      "broadcast",
+      { event: "pin" },
+      (msg: { payload?: { ct?: unknown } }) => {
+        const ct = typeof msg.payload?.ct === "string" ? msg.payload.ct : "";
+        void (async () => {
+          const opened = await openEnvelope(ct);
+          if (!opened) return;
+          const inner = parseMailboxPlain(opened);
+          if (!inner || inner.kind !== "pin") return;
+          const event: ThreadPinEvent = {
+            pinned: inner.pinned === true,
+            by: peer,
+            sessionKey: inner.sessionKey,
+            messageId: inner.messageId,
+            pinUntil: inner.pinUntil,
+            snippet: inner.body,
+            pinAt: inner.pinAt,
+          };
+          pinHandlers.current.forEach((handler) => handler(event));
         })();
       },
     );
@@ -200,10 +238,58 @@ export function usePeerChannel(
     [],
   );
 
+  const sendPin = useCallback(
+    (event: {
+      sessionKey: string;
+      messageId: string;
+      pinned: boolean;
+      pinUntil?: number | null;
+      snippet?: string;
+      pinAt?: number;
+    }) => {
+      const peer = toSlug(peerRef.current ?? "");
+      const live = realtimeRef.current;
+      if (!peer || !live || !event.messageId) return;
+      void (async () => {
+        await initializeX3DHSession(peer);
+        const envelope = await wrapTextPayload(
+          peer,
+          JSON.stringify({
+            v: 2,
+            sessionKey: event.sessionKey,
+            kind: "pin",
+            messageId: event.messageId,
+            body: event.snippet,
+            pinned: event.pinned === true,
+            pinUntil: event.pinUntil ?? null,
+            pinAt: event.pinAt,
+          }),
+        );
+        if (!envelope || !isSignalV2Ciphertext(envelope)) return;
+        if (!subscribedRef.current) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+        }
+        await live.send({
+          type: "broadcast",
+          event: "pin",
+          payload: { ct: envelope },
+        });
+      })();
+    },
+    [],
+  );
+
   const onTyping = useCallback((handler: (frame: TypingFrame) => void) => {
     typingHandlers.current.add(handler);
     return () => {
       typingHandlers.current.delete(handler);
+    };
+  }, []);
+
+  const onPin = useCallback((handler: (event: ThreadPinEvent) => void) => {
+    pinHandlers.current.add(handler);
+    return () => {
+      pinHandlers.current.delete(handler);
     };
   }, []);
 
@@ -213,16 +299,20 @@ export function usePeerChannel(
       p2pLive: false,
       sendMessage,
       sendTyping,
+      sendPin,
       onMessage,
       onTyping,
+      onPin,
       ingestRemote,
     }),
     [
       connectionState,
       sendMessage,
       sendTyping,
+      sendPin,
       onMessage,
       onTyping,
+      onPin,
       ingestRemote,
     ],
   );

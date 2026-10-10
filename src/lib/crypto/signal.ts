@@ -3,12 +3,15 @@ import {
   EncryptionResultMessageType,
   KeyHelper,
   proto,
+  SenderKeyName,
+  SenderKeyRecord,
   SessionBuilder,
   SessionCipher,
   SignalProtocolAddress,
   type DeviceType,
   type KeyPairType,
   type MessageType,
+  type SenderKeyStore,
   type SessionRecordType,
   type StorageType,
 } from "@wppconnect/libsignal-protocol";
@@ -168,7 +171,7 @@ function isKeyPair(value: unknown): value is KeyPairType {
   return rec.pubKey instanceof Uint8Array && rec.privKey instanceof Uint8Array;
 }
 
-class DarkeSignalStore implements StorageType {
+class DarkeSignalStore implements StorageType, SenderKeyStore {
   private data: StoreDump = {};
   private persistTimer: number | null = null;
 
@@ -335,9 +338,28 @@ class DarkeSignalStore implements StorageType {
   setMeta(meta: LocalMeta): void {
     this.put("meta", meta);
   }
+
+  async storeSenderKey(
+    senderKeyName: SenderKeyName,
+    record: SenderKeyRecord,
+  ): Promise<void> {
+    const encoded = SenderKeyRecord.encode(record).finish();
+    this.put(`senderKey:${senderKeyName.toString()}`, bytesToB64(encoded));
+    await this.persistNow();
+  }
+
+  async loadSenderKey(senderKeyName: SenderKeyName): Promise<SenderKeyRecord> {
+    const raw = this.get(`senderKey:${senderKeyName.toString()}`);
+    if (typeof raw !== "string" || !raw) return new SenderKeyRecord();
+    try {
+      return SenderKeyRecord.decode(b64ToBytes(raw));
+    } catch {
+      return new SenderKeyRecord();
+    }
+  }
 }
 
-async function getStore(): Promise<DarkeSignalStore> {
+export async function getSignalStore(): Promise<DarkeSignalStore> {
   if (storeSingleton) return storeSingleton;
   const store = new DarkeSignalStore();
   await store.hydrate();
@@ -359,7 +381,7 @@ export async function hasOpenSignalSession(
   if (!slug || typeof window === "undefined") return false;
   try {
     await ensureLocalSignalIdentity();
-    const store = await getStore();
+    const store = await getSignalStore();
     const cipher = new SessionCipher(store, signalAddress(slug));
     return cipher.hasOpenSession();
   } catch {
@@ -566,7 +588,7 @@ async function replenishPreKeys(store: DarkeSignalStore): Promise<void> {
 export async function syncPublicSignalBundle(): Promise<void> {
   const auth = await currentAuth();
   if (!auth) return;
-  const store = await getStore();
+  const store = await getSignalStore();
   const identity = await store.getIdentityKeyPair();
   const registrationId = await store.getLocalRegistrationId();
   const meta = store.getMeta();
@@ -615,7 +637,7 @@ export async function ensureLocalSignalIdentity(): Promise<boolean> {
     bootPromise = (async () => {
       const auth = await currentAuth();
       if (!auth) return false;
-      const store = await getStore();
+      const store = await getSignalStore();
       await generateLocalIdentity(store, auth);
       await replenishPreKeys(store);
       await syncPublicSignalBundle();
@@ -704,7 +726,7 @@ export async function initializeX3DHSession(
   if (!ready) return false;
   const slug = toSlug(peerUsername);
   if (!slug) return false;
-  const store = await getStore();
+  const store = await getSignalStore();
   const address = signalAddress(slug);
   const cipher = new SessionCipher(store, address);
   if (await cipher.hasOpenSession()) return true;
@@ -728,7 +750,7 @@ async function encryptEnvelope(
     try {
       const ok = await initializeX3DHSession(peerUsername);
       if (!ok) return null;
-      const store = await getStore();
+      const store = await getSignalStore();
       const cipher = new SessionCipher(store, signalAddress(peerUsername));
       const encrypted = await cipher.encrypt(bytes);
       const envelope = envelopeFromCipher(encrypted);
@@ -751,7 +773,7 @@ async function decryptEnvelope(
   return withPeerLock(peerUsername, async () => {
     try {
       await ensureLocalSignalIdentity();
-      const store = await getStore();
+      const store = await getSignalStore();
       const cipher = new SessionCipher(store, signalAddress(peerUsername));
       const body = cipherBodyFromEnvelope(envelope);
       const plain =

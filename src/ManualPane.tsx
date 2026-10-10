@@ -29,15 +29,15 @@ const FAQ: FaqItem[] = [
   },
   {
     id: "access-keys",
-    section: "Teams & Access Keys",
-    q: "How do Team and Channel Access Keys work?",
+    section: "Channels & Access Keys",
+    q: "How do Channel Access Keys work?",
     a: "Admins generate temporary cryptographic keys (DARKE-WKS-... / DARKE-CHN-...) with strict seat limits and time-to-live expiration. Once redeemed or revoked, the key is permanently invalidated.",
   },
   {
     id: "id-visibility",
-    section: "Teams & Access Keys",
+    section: "Channels & Access Keys",
     q: "Can other users see my DARKE ID in public rooms or chats?",
-    a: "No. Teammates and external users only see your public @username, Display Name, and chosen avatar. Your DARKE ID is kept strictly local to your authentication terminal.",
+    a: "No. Other users only see your public @username, Display Name, and chosen avatar. Your DARKE ID is kept strictly local to your authentication terminal.",
   },
   {
     id: "vault-file",

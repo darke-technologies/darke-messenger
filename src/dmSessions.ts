@@ -53,7 +53,7 @@ export type DmMessage = {
   pinnedBy?: string;
 };
 
-export type RoomKind = "team" | "direct";
+export type RoomKind = "team" | "direct" | "room";
 
 /** Node-local chat invite. Never consumes organization.seats_used. */
 export type ChatGuest = {
@@ -95,6 +95,7 @@ export type DmThread = {
   disappearAfter?: "off" | "24h" | "7d";
   accentColor?: string | null;
   description?: string;
+  skSharedWith?: string[];
 };
 
 export type PinDuration = "24h" | "7d" | "30d" | "forever";
@@ -118,15 +119,86 @@ export function makePinNotice(opts: {
   at?: number;
 }): DmMessage {
   const at = opts.at ?? Date.now();
+  const target = opts.messageId.trim();
   return {
-    id: `pin-notice-${opts.messageId}-${at}`,
+    id: `pin-notice-${target || at}`,
     direction: "received",
     body: "pinned a message",
     at,
     e2ee: true,
     kind: "pin-notice",
-    pinTargetId: opts.messageId,
-    pinnedBy: opts.by,
+    pinTargetId: target,
+    pinnedBy: opts.by.replace(/^@/, "").trim().toLowerCase(),
+  };
+}
+
+export type ThreadPinEvent = {
+  pinned: boolean;
+  by: string;
+  sessionKey?: string;
+  messageId?: string;
+  pinUntil?: number | null;
+  snippet?: string;
+  pinAt?: number;
+};
+
+function pinSnippet(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+export function resolvePinnedMessage(
+  row: DmThread,
+  event: Pick<ThreadPinEvent, "messageId" | "snippet" | "pinAt">,
+): DmMessage | undefined {
+  const id = event.messageId?.trim();
+  if (id) {
+    const hit = row.messages.find((msg) => msg.id === id);
+    if (hit) return hit;
+  }
+  const snippet = pinSnippet(event.snippet || "");
+  if (!snippet) return undefined;
+  const matches = row.messages.filter((msg) => {
+    if (msg.kind === "pin-notice" || msg.kind === "system" || msg.is_system) {
+      return false;
+    }
+    return pinSnippet(msg.fileName || msg.body) === snippet;
+  });
+  if (!matches.length) return undefined;
+  if (event.pinAt != null && matches.length > 1) {
+    return matches.reduce((best, msg) =>
+      Math.abs(msg.at - (event.pinAt as number)) <
+      Math.abs(best.at - (event.pinAt as number))
+        ? msg
+        : best,
+    );
+  }
+  return matches[matches.length - 1];
+}
+
+export function applyThreadPin(row: DmThread, event: ThreadPinEvent): DmThread {
+  const on = event.pinned;
+  const who = event.by.replace(/^@/, "").trim().toLowerCase();
+  const target = on ? resolvePinnedMessage(row, event) : undefined;
+  const targetId = on ? target?.id || event.messageId?.trim() || null : null;
+  let messages: DmMessage[] = row.messages.map((msg) => ({
+    ...msg,
+    pinned: Boolean(on && targetId && msg.id === targetId),
+  }));
+  if (on && who && targetId) {
+    const noticeId = `pin-notice-${targetId}`;
+    if (!messages.some((msg) => msg.id === noticeId)) {
+      messages = [
+        ...messages,
+        makePinNotice({ messageId: targetId, by: who }),
+      ];
+    }
+  }
+  return {
+    ...row,
+    pinnedMessageId: on ? targetId : null,
+    pinnedBy: on ? who : null,
+    pinnedUntil: on ? event.pinUntil ?? null : null,
+    messages,
   };
 }
 
@@ -430,7 +502,12 @@ export function teamChatSessionKey(
 export function chatRoomPath(
   thread: Pick<DmThread, "sessionKey" | "roomKind">,
 ): string {
-  const type = thread.roomKind === "team" ? "team" : "direct";
+  const type =
+    thread.roomKind === "room"
+      ? "room"
+      : thread.roomKind === "team"
+        ? "team"
+        : "direct";
   return `/app/chat/${encodeURIComponent(thread.sessionKey)}?type=${type}`;
 }
 

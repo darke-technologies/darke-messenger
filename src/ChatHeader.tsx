@@ -7,7 +7,6 @@ import {
   IconPhone,
   IconSearch,
 } from "./icons";
-import type { DarkeTeam } from "./teamContainer";
 import { UserAvatar } from "./UserAvatar";
 
 export function ChatHeader({
@@ -19,8 +18,6 @@ export function ChatHeader({
   onRename,
   canRename,
   memberCount = 0,
-  teams = [],
-  onMoveToTeam,
   isGroup = false,
   signalSession = false,
   peerAvatar = null,
@@ -38,8 +35,6 @@ export function ChatHeader({
   onRename: (name: string) => void;
   canRename: boolean;
   memberCount?: number;
-  teams?: DarkeTeam[];
-  onMoveToTeam?: (teamId?: string) => void;
   isGroup?: boolean;
   signalSession?: boolean;
   peerAvatar?: string | null;
@@ -51,10 +46,8 @@ export function ChatHeader({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
-  const [pickOpen, setPickOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const pickRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,32 +59,21 @@ export function ChatHeader({
   }, [editing]);
 
   useEffect(() => {
-    if (!pickOpen && !menuOpen) return;
+    if (!menuOpen) return;
     function close(event: MouseEvent) {
       const node = event.target as Node;
-      if (pickRef.current?.contains(node)) return;
       if (menuRef.current?.contains(node)) return;
-      setPickOpen(false);
       setMenuOpen(false);
     }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [pickOpen, menuOpen]);
+  }, [menuOpen]);
 
   function commit() {
     const next = draft.trim();
     setEditing(false);
     if (next && next !== title) onRename(next);
     else setDraft(title);
-  }
-
-  function handleMove() {
-    if (!onMoveToTeam) return;
-    if (teams.length > 1) {
-      setPickOpen((open) => !open);
-      return;
-    }
-    onMoveToTeam(teams[0]?.id);
   }
 
   if (!isGroup) {
@@ -238,40 +220,6 @@ export function ChatHeader({
             <IconLock className="chat-sec-pill-icon" />
             {signalSession ? "E2EE · Signal" : "P2P · ENCRYPTED"}
           </span>
-          {onMoveToTeam ? (
-            <div className="chat-move-wrap" ref={pickRef}>
-              <button
-                type="button"
-                className="chat-move-btn"
-                aria-haspopup={teams.length > 1 ? "listbox" : undefined}
-                aria-expanded={teams.length > 1 ? pickOpen : undefined}
-                onClick={handleMove}
-              >
-                Move Group to Team
-              </button>
-              {pickOpen && teams.length > 1 ? (
-                <ul className="chat-move-menu" role="listbox" aria-label="Choose a team">
-                  {teams.map((team) => (
-                    <li key={team.id}>
-                      <button
-                        type="button"
-                        role="option"
-                        onClick={() => {
-                          setPickOpen(false);
-                          onMoveToTeam(team.id);
-                        }}
-                      >
-                        <span>{team.name}</span>
-                        <em>
-                          {team.ownerHandle ? `@${team.ownerHandle}` : ""}
-                        </em>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
       <nav className="chat-head-tabs" aria-label="Chat sections">

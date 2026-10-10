@@ -80,7 +80,11 @@ export function readNavSnapshot(slug: string): NavSnapshot | null {
     if (!section) return null;
     return {
       section:
-        section === "home" || section === "workspace" ? "compose" : section,
+        section === "home" ||
+        section === "workspace" ||
+        section === "teams"
+          ? "compose"
+          : section,
       bunkerCollapsed: data.bunkerCollapsed === true,
       selection: parseSelection(data.selection),
     };
@@ -109,7 +113,7 @@ export function writeNavSnapshot(slug: string, snap: NavSnapshot): void {
 export function initialSection(slug: string): Section {
   if (typeof window !== "undefined") {
     const path = window.location.pathname;
-    if (path.startsWith("/teams") || /^\/join\/[^/]+/.test(path)) return "teams";
+    if (path.startsWith("/teams") || /^\/join\/[^/]+/.test(path)) return "compose";
     if (path.startsWith("/manual")) return "manual";
     if (path.startsWith("/app/feed")) return "feed";
     if (path.startsWith("/app/search")) return "search";

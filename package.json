@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "inspect:rooms": "node scripts/inspect-room-relay.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",

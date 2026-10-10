@@ -41,10 +41,7 @@ import { rememberPerson, usePersonDirectory } from "./personDirectory";
 import { memberDisplayName } from "./getChatTitle";
 import { isProPlan } from "./workspaces";
 import { useWorkspacesMaybe } from "./WorkspaceContext";
-import { listTeams } from "./teamContainer";
-import { threadIsGroup } from "./chatController";
-import { TeamMoveSeatModal } from "./TeamMoveSeatModal";
-import type { TeamMovePreview } from "./teamService";
+import { threadIsGroup, threadIsRoom } from "./chatController";
 import { blockPeer, isPeerBlocked } from "./blockedPeers";
 import { ForwardModal } from "./ForwardModal";
 import { PinModal } from "./PinModal";
@@ -65,6 +62,7 @@ export function ChatView() {
     editMessage,
     deleteMessages,
     pinMessage,
+    applyRemotePin,
     forwardMessages,
     threads,
     startEncryptedChat,
@@ -77,7 +75,6 @@ export function ChatView() {
     title,
     renameActive,
     inviteHandle,
-    bindChatToTeam,
     canInvite,
     joinError,
     deleteThread,
@@ -110,11 +107,9 @@ export function ChatView() {
   const [nodeTyping, setNodeTyping] = useState(false);
   const [inviteRequested, setInviteRequested] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [moveBlock, setMoveBlock] = useState<TeamMovePreview | null>(null);
   const workspaces = useWorkspacesMaybe();
   const pro = isProPlan(workspaces?.tier ?? "free");
   const planLabel = pro ? "Premium" : "Free";
-  const moveTeams = listTeams(slug);
   const [me, setMe] = useState<ChatPerson>({
     handle: slug,
     display: slug,
@@ -287,6 +282,15 @@ export function ChatView() {
   }, [signalPeer, connected, active?.id]);
 
   useEffect(() => {
+    return channel.onPin((event) => {
+      applyRemotePin({
+        ...event,
+        sessionKey: event.sessionKey || active?.sessionKey,
+      });
+    });
+  }, [applyRemotePin, channel, active?.sessionKey]);
+
+  useEffect(() => {
     return channel.onMessage((payload, replyToMessageId) => {
       void (async () => {
         if (!signalPeer || !isSignalV2Ciphertext(payload)) return;
@@ -342,8 +346,9 @@ export function ChatView() {
     `${active?.sessionKey ?? ""}:peer:${active?.handle ?? "peer"}`,
   );
   const ownerHandle = chatOwnerHandle(active, slug);
-  const isGroup = Boolean(active && threadIsGroup(active));
-  const isDirect = Boolean(active && !isGroup);
+  const isRoom = Boolean(active && threadIsRoom(active));
+  const isGroup = Boolean(active && threadIsGroup(active) && !isRoom);
+  const isDirect = Boolean(active && !isGroup && !isRoom);
   const viewTab = isDirect && tab === "members" ? "messages" : tab;
   const headerTitle = isDirect
     ? peer.display?.trim() || peer.handle || title
@@ -494,8 +499,7 @@ export function ChatView() {
         canRename={Boolean(active)}
         memberCount={chatMemberCount(active, slug)}
         handleBadge={undefined}
-        teams={moveTeams}
-        isGroup={isGroup}
+        isGroup={isGroup || isRoom}
         signalSession={signalSession}
         peerAvatar={peer.avatar}
         peerHandle={peer.handle}
@@ -509,16 +513,6 @@ export function ChatView() {
         onDelete={() => {
           if (active) deleteThread(active.id);
         }}
-        onMoveToTeam={
-          isGroup && active && !active.teamId
-            ? (teamId) => {
-                const result = bindChatToTeam(active.id, teamId);
-                if (!result.ok && result.preview?.blocked) {
-                  setMoveBlock(result.preview);
-                }
-              }
-            : undefined
-        }
       />
 
       {livePin ? (
@@ -555,7 +549,7 @@ export function ChatView() {
         </div>
       ) : null}
 
-      {viewTab === "members" && isGroup ? (
+      {viewTab === "members" && (isGroup || isRoom) ? (
         <MembersTab
           slug={slug}
           active={active}
@@ -679,6 +673,17 @@ export function ChatView() {
                     onPin={(row) => {
                       if (row.pinned) {
                         void pinMessage(row.id, false);
+                        if (active) {
+                          channel.sendPin({
+                            sessionKey: active.sessionKey,
+                            messageId: row.id,
+                            pinned: false,
+                            snippet: (row.fileName || row.body)
+                              .replace(/\s+/g, " ")
+                              .trim(),
+                            pinAt: row.at,
+                          });
+                        }
                         return;
                       }
                       setPinTarget(row);
@@ -796,9 +801,7 @@ export function ChatView() {
           onClose={() => setInviteOpen(false)}
           canCopy
           memberCount={chatMemberCount(active, slug)}
-          teamBound={Boolean(active.teamId)}
           isGroup={threadIsGroup(active)}
-          teamId={active.teamId}
           slug={slug}
           takenHandles={[
             active.peerUsername ?? "",
@@ -808,18 +811,24 @@ export function ChatView() {
           onAdd={inviteHandle}
         />
       ) : null}
-      {moveBlock ? (
-        <TeamMoveSeatModal preview={moveBlock} onClose={() => setMoveBlock(null)} />
-      ) : null}
       {pinTarget ? (
         <PinModal
           onClose={() => setPinTarget(null)}
           onPin={(duration) => {
-            void pinMessage(
-              pinTarget.id,
-              true,
-              pinUntilFromDuration(duration),
-            );
+            const until = pinUntilFromDuration(duration);
+            void pinMessage(pinTarget.id, true, until);
+            if (active) {
+              channel.sendPin({
+                sessionKey: active.sessionKey,
+                messageId: pinTarget.id,
+                pinned: true,
+                pinUntil: until,
+                snippet: (pinTarget.fileName || pinTarget.body)
+                  .replace(/\s+/g, " ")
+                  .trim(),
+                pinAt: pinTarget.at,
+              });
+            }
             setPinTarget(null);
           }}
         />

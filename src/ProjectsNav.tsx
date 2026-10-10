@@ -16,7 +16,7 @@ export function WorkspacesHeader() {
   return (
     <div className="nav-cat-row nav-cat-row-ws">
       <span className="nav-cat-ws-title">
-        <span className="nav-cat">TEAMS</span>
+        <span className="nav-cat">WORKSPACES</span>
         <span
           className="nav-cat-lock"
           title={WORKSPACES_LOCK_TIP}
@@ -59,9 +59,9 @@ function teamHue(id: string) {
 
 export function WorkspacesTree({
   onOpen,
-  onJoin,
+  onJoin: _onJoin,
   onUpgrade: _onUpgrade,
-  hideJoin = false,
+  hideJoin: _hideJoin = false,
 }: TreeProps) {
   const {
     active,
@@ -83,7 +83,7 @@ export function WorkspacesTree({
           </li>
         ) : null}
         {listed.length === 0 && !error ? (
-          <li className="ws-tree-empty muted">No teams yet.</li>
+          <li className="ws-tree-empty muted">No workspaces yet.</li>
         ) : null}
         {listed.map((workspace) => {
           const channels = channelsByWorkspace[workspace.id] ?? [];
@@ -161,17 +161,6 @@ export function WorkspacesTree({
             </li>
           );
         })}
-        {hideJoin ? null : (
-          <li>
-            <button
-              type="button"
-              className="ws-tree-create"
-              onClick={onJoin}
-            >
-              JOIN TEAM
-            </button>
-          </li>
-        )}
       </ul>
     </div>
   );
@@ -296,9 +285,9 @@ export function CreateWorkspaceModal({
         >
           ×
         </button>
-        <h3 id="workspace-join-title">JOIN TEAM</h3>
+        <h3 id="workspace-join-title">Join workspace</h3>
         <p className="muted apps-submit-note">
-          Join with an invite key to a channel or team.
+          Join with an invite key to a channel or workspace.
         </p>
         {error ? (
           <p className="error" role="alert">
@@ -306,7 +295,7 @@ export function CreateWorkspaceModal({
           </p>
         ) : null}
         <label className="ws-create-label" htmlFor="workspace-join-code">
-          Team invite key
+          Workspace invite key
         </label>
         <input
           id="workspace-join-code"
@@ -314,7 +303,7 @@ export function CreateWorkspaceModal({
           value={joinCode}
           disabled={busy}
           autoFocus
-          placeholder="Enter Team Invite Key..."
+          placeholder="Enter workspace invite key..."
           onChange={(e) => setJoinCode(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -330,7 +319,7 @@ export function CreateWorkspaceModal({
             disabled={busy || !joinCode.trim()}
             onClick={() => void join()}
           >
-            JOIN TEAM
+            Join workspace
           </button>
         </div>
       </div>

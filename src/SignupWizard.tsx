@@ -305,9 +305,8 @@ export function SignupWizard({
           <p className="signup-progress">STEP 2 OF 2 • OPERATOR IDENTITY</p>
           <h1 className="signup-title">SET YOUR DISPLAY PROFILE</h1>
           <p className="signup-copy">
-            Choose how your team members, contacts, and networks see you in
-            DARKE Messenger, Teams, Channels, and feeds. Create or Join a Team
-            after you enter.
+            Choose how contacts and networks see you in DARKE Messenger,
+            Channels, and feeds.
           </p>
           <label className="gate-id-loc-label" htmlFor="signup-display-name">
             Display Name

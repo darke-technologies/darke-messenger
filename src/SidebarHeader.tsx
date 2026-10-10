@@ -232,9 +232,7 @@ export function AppHeader({
         requested={inviteRequested}
         onRequest={() => setInviteRequested(true)}
         memberCount={chatMemberCount(chat, dmSlug || slug)}
-        teamBound={Boolean(chat?.teamId)}
         isGroup={Boolean(chat && (chat.isGroup || chat.roomKind === "team"))}
-        teamId={chat?.teamId}
         slug={dmSlug || slug}
         takenHandles={
           chat

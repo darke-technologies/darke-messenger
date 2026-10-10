@@ -58,7 +58,7 @@ export function resolveChatTitle(
 
   if (threadIsGroup(thread)) {
     const named = thread.displayName?.trim() ?? "";
-    return named || "Group Node";
+    return named || (thread.roomKind === "room" ? "Room" : "Group Node");
   }
 
   const self = normId(currentUserId);

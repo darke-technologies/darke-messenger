@@ -12,17 +12,26 @@ export function UpgradeModal() {
   const { isOpen, kind } = useUpgradeModalStore();
   const groups = kind === "groups";
   const team = kind === "team";
-  const title = team
-    ? "Unlock more TEAM seats"
-    : groups
-      ? "Enable Team Group Nodes"
-      : "Chat capacity reached";
-  const note = team
-    ? "Free accounts include 2 TEAM seats (you plus one member). Adding a third TEAM member requires DARKE Premium."
-    : groups
-      ? "Multi-peer P2P encryption and group collaboration require a DARKE Premium license."
-      : "You have reached member capacity for this chat under your plan. To add more members upgrade now.";
-  const action = team || groups ? "Upgrade to Premium" : "See our pricing";
+  const rooms = kind === "rooms";
+  const title = rooms
+    ? "Unlock more Rooms"
+    : team
+      ? "Unlock more TEAM seats"
+      : groups
+        ? "Enable Team Group Nodes"
+        : "Chat capacity reached";
+  const note = rooms
+    ? "Free accounts can own 1 Signal Room. Additional rooms require the DARKE Enterprise plan."
+    : team
+      ? "Free accounts include 2 TEAM seats (you plus one member). Adding a third TEAM member requires DARKE Premium."
+      : groups
+        ? "Multi-peer P2P encryption and group collaboration require a DARKE Premium license."
+        : "You have reached member capacity for this chat under your plan. To add more members upgrade now.";
+  const action = rooms
+    ? "Upgrade to Enterprise"
+    : team || groups
+      ? "Upgrade to Premium"
+      : "See our pricing";
 
   useEffect(() => {
     if (!isOpen) return;

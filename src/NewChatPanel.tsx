@@ -1,25 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreateGroupModal, type NewChatContact } from "./CreateGroupModal";
 import { sidebarPeerHandle, listChatMemberHandles } from "./chatService";
 import { threadIsGroup } from "./chatController";
 import { useDm } from "./DmContext";
 import { loadMyFollowingIds } from "./follows";
 import { searchInvitePeople } from "./inviteSearch";
-import {
-  IconComment,
-  IconLink,
-  IconPeople,
-  IconSearch,
-} from "./icons";
+import { CreateRoomModal } from "./CreateRoomModal";
+import { IconComment, IconLink, IconPeople, IconSearch } from "./icons";
 import { loadProfilesByIds, type DarkeProfile } from "./profile";
 import { UserAvatar } from "./UserAvatar";
-import {
-  generateSessionKey,
-  sessionShareLink,
-  showCopyLinkToast,
-} from "./dmSessions";
+import { showCopyLinkToast } from "./dmSessions";
 
-type CreateScreen = "menu" | "chat" | "group-members" | "group-name";
+type NewChatContact = Pick<
+  DarkeProfile,
+  "username" | "display_name" | "avatar_url"
+>;
 
 export function NewChatPanel({
   slug,
@@ -33,16 +27,14 @@ export function NewChatPanel({
     setActiveId,
     openNewMessage,
     startEncryptedChat,
-    startGroupChat,
+    createRoom,
     copyChatLink,
   } = useDm();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [screen, setScreen] = useState<CreateScreen>("menu");
+  const [screen, setScreen] = useState<"menu" | "chat" | "room">("menu");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<DarkeProfile[]>([]);
   const [following, setFollowing] = useState<NewChatContact[]>([]);
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
-  const [groupKey, setGroupKey] = useState("");
 
   const self = slug.replace(/^@/, "").trim().toLowerCase();
   const q = query.trim().replace(/^@/, "").toLowerCase();
@@ -50,6 +42,7 @@ export function NewChatPanel({
   const localContacts = useMemo(() => {
     const map = new Map<string, NewChatContact>();
     for (const thread of threads) {
+      if (threadIsGroup(thread)) continue;
       const peer = sidebarPeerHandle(thread, slug);
       const handles = peer
         ? [peer]
@@ -107,7 +100,7 @@ export function NewChatPanel({
   }, []);
 
   useEffect(() => {
-    if (q.length < 2 || screen === "menu") {
+    if (q.length < 2) {
       setHits([]);
       return;
     }
@@ -125,18 +118,7 @@ export function NewChatPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [q, screen]);
-
-  function goMenu() {
-    setQuery("");
-    setScreen("menu");
-  }
-
-  function openGroupMembers() {
-    setQuery("");
-    setGroupKey((curr) => curr || generateSessionKey());
-    setScreen("group-members");
-  }
+  }, [q]);
 
   function openDirect(username: string) {
     const handle = username.replace(/^@/, "").trim().toLowerCase();
@@ -151,88 +133,44 @@ export function NewChatPanel({
     onClose();
   }
 
-  function toggleMember(username: string) {
-    const handle = username.replace(/^@/, "").trim().toLowerCase();
-    if (!handle || handle === self) return;
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(handle)) next.delete(handle);
-      else next.add(handle);
-      return next;
-    });
-  }
-
-  async function copyInvite(kind: "chat" | "group") {
-    let link = "";
-    if (kind === "chat") {
-      link = openNewMessage();
-      try {
-        await navigator.clipboard.writeText(link);
-        showCopyLinkToast("invite");
-      } catch {
-        void copyChatLink();
-      }
-      return;
-    }
-    const key = groupKey || generateSessionKey();
-    if (!groupKey) setGroupKey(key);
-    link = sessionShareLink(key);
+  async function copyInvite() {
+    const link = openNewMessage();
     try {
       await navigator.clipboard.writeText(link);
       showCopyLinkToast("invite");
     } catch {
-      showCopyLinkToast("invite");
+      void copyChatLink();
     }
   }
 
-  if (screen === "group-name") {
+  if (screen === "room") {
     return (
-      <CreateGroupModal
-        contacts={localContacts}
-        members={[...picked]}
-        onBack={() => setScreen("group-members")}
-        onCreate={(name, members, avatar) => {
-          startGroupChat(name, members, avatar, groupKey);
-          onClose();
+      <CreateRoomModal
+        onBack={() => setScreen("menu")}
+        onCreate={(name, topic) => {
+          const id = createRoom(name, topic);
+          if (id) onClose();
         }}
       />
     );
   }
 
-  const picking = screen === "group-members";
-  const title =
-    screen === "menu" ? "Create" : picking ? "Add members" : "New chat";
-
-  return (
-    <div className="new-chat-panel">
-      <header className="new-chat-head">
-        <button
-          type="button"
-          className="new-chat-back"
-          aria-label="Back"
-          onClick={() => {
-            if (screen === "menu") onClose();
-            else goMenu();
-          }}
-        >
-          ‹
-        </button>
-        <h2>{title}</h2>
-      </header>
-
-      {screen === "menu" ? (
+  if (screen === "menu") {
+    return (
+      <div className="new-chat-panel">
+        <header className="new-chat-head">
+          <button
+            type="button"
+            className="new-chat-back"
+            aria-label="Back"
+            onClick={onClose}
+          >
+            ‹
+          </button>
+          <h2>Create</h2>
+        </header>
         <div className="new-chat-scroll">
           <div className="new-chat-actions">
-            <button
-              type="button"
-              className="new-chat-action"
-              onClick={openGroupMembers}
-            >
-              <span className="new-chat-action-icon" aria-hidden>
-                <IconPeople className="new-chat-action-svg" />
-              </span>
-              New group
-            </button>
             <button
               type="button"
               className="new-chat-action"
@@ -246,123 +184,117 @@ export function NewChatPanel({
               </span>
               New chat
             </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="new-chat-search-wrap">
-            <IconSearch className="new-chat-search-icon" />
-            <input
-              ref={searchRef}
-              className="new-chat-search"
-              value={query}
-              autoFocus
-              placeholder="Search @username..."
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                const first = hits[0] ?? visibleContacts[0];
-                if (!first) return;
-                e.preventDefault();
-                if (picking) toggleMember(first.username);
-                else openDirect(first.username);
-              }}
-            />
-          </div>
-          <div className="new-chat-scroll">
-            {q.length < 2 ? (
-              <div className="new-chat-actions">
-                <button
-                  type="button"
-                  className="new-chat-action"
-                  onClick={() => void copyInvite(picking ? "group" : "chat")}
-                >
-                  <span className="new-chat-action-icon" aria-hidden>
-                    <IconLink className="new-chat-action-svg" />
-                  </span>
-                  {picking ? "Group Invite Link" : "Chat Invite Link"}
-                </button>
-                {picking ? null : (
-                  <button
-                    type="button"
-                    className="new-chat-action"
-                    onClick={() => searchRef.current?.focus()}
-                  >
-                    <span className="new-chat-action-icon is-at" aria-hidden>
-                      @
-                    </span>
-                    Find by username
-                  </button>
-                )}
-              </div>
-            ) : null}
-            {q.length >= 2
-              ? hits.map((person) => (
-                  <ContactRow
-                    key={person.id}
-                    person={person}
-                    picking={picking}
-                    on={picked.has(norm(person.username))}
-                    onOpen={() =>
-                      picking
-                        ? toggleMember(person.username)
-                        : openDirect(person.username)
-                    }
-                  />
-                ))
-              : null}
-            <p className="new-chat-section">Contacts</p>
-            {visibleContacts.length === 0 ? (
-              <p className="muted new-chat-empty">No contacts yet.</p>
-            ) : (
-              visibleContacts.map((person) => (
-                <ContactRow
-                  key={person.username}
-                  person={person}
-                  picking={picking}
-                  on={picked.has(norm(person.username))}
-                  onOpen={() =>
-                    picking
-                      ? toggleMember(person.username)
-                      : openDirect(person.username)
-                  }
-                />
-              ))
-            )}
-          </div>
-          {picking ? (
             <button
               type="button"
-              className="term-btn term-btn-emerald new-chat-create"
-              onClick={() => setScreen("group-name")}
+              className="new-chat-action"
+              onClick={() => setScreen("room")}
             >
-              {picked.size > 0 ? "Next" : "Skip"}
+              <span className="new-chat-action-icon" aria-hidden>
+                <IconPeople className="new-chat-action-svg" />
+              </span>
+              Create Room
             </button>
-          ) : null}
-        </>
-      )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="new-chat-panel">
+      <header className="new-chat-head">
+        <button
+          type="button"
+          className="new-chat-back"
+          aria-label="Back"
+          onClick={() => {
+            setQuery("");
+            setScreen("menu");
+          }}
+        >
+          ‹
+        </button>
+        <h2>New chat</h2>
+      </header>
+      <div className="new-chat-search-wrap">
+        <IconSearch className="new-chat-search-icon" />
+        <input
+          ref={searchRef}
+          className="new-chat-search"
+          value={query}
+          autoFocus
+          placeholder="Search @username..."
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            const first = hits[0] ?? visibleContacts[0];
+            if (!first) return;
+            e.preventDefault();
+            openDirect(first.username);
+          }}
+        />
+      </div>
+      <div className="new-chat-scroll">
+        {q.length < 2 ? (
+          <div className="new-chat-actions">
+            <button
+              type="button"
+              className="new-chat-action"
+              onClick={() => void copyInvite()}
+            >
+              <span className="new-chat-action-icon" aria-hidden>
+                <IconLink className="new-chat-action-svg" />
+              </span>
+              Chat Invite Link
+            </button>
+            <button
+              type="button"
+              className="new-chat-action"
+              onClick={() => searchRef.current?.focus()}
+            >
+              <span className="new-chat-action-icon is-at" aria-hidden>
+                @
+              </span>
+              Find by username
+            </button>
+          </div>
+        ) : null}
+        {q.length >= 2
+          ? hits.map((person) => (
+              <ContactRow
+                key={person.id}
+                person={person}
+                onOpen={() => openDirect(person.username)}
+              />
+            ))
+          : null}
+        <p className="new-chat-section">Contacts</p>
+        {visibleContacts.length === 0 ? (
+          <p className="muted new-chat-empty">No contacts yet.</p>
+        ) : (
+          visibleContacts.map((person) => (
+            <ContactRow
+              key={person.username}
+              person={person}
+              onOpen={() => openDirect(person.username)}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
 
 function ContactRow({
   person,
-  picking,
-  on,
   onOpen,
 }: {
   person: NewChatContact;
-  picking: boolean;
-  on: boolean;
   onOpen: () => void;
 }) {
   const handle = norm(person.username);
   return (
-    <button
-      type="button"
-      className={`new-chat-person${on ? " is-on" : ""}`}
-      onClick={onOpen}
-    >
+    <button type="button" className="new-chat-person" onClick={onOpen}>
       <UserAvatar
         username={person.username}
         url={person.avatar_url}
@@ -373,11 +305,6 @@ function ContactRow({
         <strong>{contactLabel(person)}</strong>
         <span>@{handle}</span>
       </span>
-      {picking ? (
-        <span className="new-chat-check" aria-hidden>
-          {on ? "●" : "○"}
-        </span>
-      ) : null}
     </button>
   );
 }

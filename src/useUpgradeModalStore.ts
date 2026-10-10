@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-type UpgradeKind = "capacity" | "groups" | "team";
+type UpgradeKind = "capacity" | "groups" | "team" | "rooms";
 
 type UpgradeModalState = {
   isOpen: boolean;

@@ -6,12 +6,27 @@ import {
   wrapBytesPayload,
   wrapTextPayload,
 } from "./lib/crypto/signal";
+import {
+  isSignalSenderKeyCiphertext,
+  wrapRoomSenderKeyPayload,
+} from "./lib/crypto/signalRooms";
+import {
+  inspectClientDecrypt,
+  inspectRelayInsert,
+} from "./lib/crypto/e2eeInspect";
 import { toSlug } from "./slug";
 import { supabase } from "./supabase";
 
 export const MAILBOX_BUCKET = "pending-mailbox";
 
-export type MailboxKind = "text" | "file" | "edit" | "delete" | "pin";
+export type MailboxKind =
+  | "text"
+  | "file"
+  | "edit"
+  | "delete"
+  | "pin"
+  | "skdm"
+  | "room";
 
 export type MailboxPlain = {
   v: 2;
@@ -23,6 +38,10 @@ export type MailboxPlain = {
   messageId?: string;
   pinned?: boolean;
   pinUntil?: number | null;
+  pinAt?: number;
+  title?: string;
+  topic?: string;
+  members?: string[];
 };
 
 export type MailboxEnqueue =
@@ -38,7 +57,7 @@ export type MailboxRow = {
   created_at: string;
 };
 
-function parseInner(raw: string): MailboxPlain | null {
+export function parseMailboxPlain(raw: string): MailboxPlain | null {
   try {
     const parsed = JSON.parse(raw) as Partial<MailboxPlain>;
     if (parsed.v !== 2 || typeof parsed.sessionKey !== "string") {
@@ -49,7 +68,9 @@ function parseInner(raw: string): MailboxPlain | null {
       parsed.kind !== "file" &&
       parsed.kind !== "edit" &&
       parsed.kind !== "delete" &&
-      parsed.kind !== "pin"
+      parsed.kind !== "pin" &&
+      parsed.kind !== "skdm" &&
+      parsed.kind !== "room"
     ) {
       return null;
     }
@@ -64,7 +85,17 @@ function parseInner(raw: string): MailboxPlain | null {
         typeof parsed.messageId === "string" ? parsed.messageId : undefined,
       pinned: parsed.pinned === true,
       pinUntil:
-        typeof parsed.pinUntil === "number" ? parsed.pinUntil : parsed.pinUntil === null ? null : undefined,
+        typeof parsed.pinUntil === "number"
+          ? parsed.pinUntil
+          : parsed.pinUntil === null
+            ? null
+            : undefined,
+      pinAt: typeof parsed.pinAt === "number" ? parsed.pinAt : undefined,
+      title: typeof parsed.title === "string" ? parsed.title : undefined,
+      topic: typeof parsed.topic === "string" ? parsed.topic : undefined,
+      members: Array.isArray(parsed.members)
+        ? parsed.members.filter((row): row is string => typeof row === "string")
+        : undefined,
     };
   } catch {
     return null;
@@ -163,8 +194,10 @@ export async function queueMailboxControl(opts: {
   body?: string;
   pinned?: boolean;
   pinUntil?: number | null;
+  pinAt?: number;
 }): Promise<MailboxEnqueue> {
-  const secrets = [opts.body ?? ""].filter((s) => s.length >= 8);
+  const snippet = (opts.body ?? "").trim();
+  const secrets = snippet.length >= 8 ? [snippet] : [];
   const packed = await wrapMailboxInner(
     opts.recipient,
     {
@@ -172,9 +205,10 @@ export async function queueMailboxControl(opts: {
       sessionKey: opts.sessionKey,
       kind: opts.kind,
       messageId: opts.messageId,
-      body: opts.body ?? (opts.kind === "pin" ? "pinned a message" : undefined),
-      pinned: opts.pinned,
-      pinUntil: opts.pinUntil,
+      body: snippet || undefined,
+      pinned: opts.pinned === true,
+      pinUntil: opts.pinUntil ?? null,
+      pinAt: opts.pinAt,
     },
     secrets,
   );
@@ -184,6 +218,95 @@ export async function queueMailboxControl(opts: {
     recipient: opts.recipient,
     ciphertext: packed.envelope,
     secrets,
+  });
+}
+
+export async function queueRoomSenderKey(opts: {
+  sender: string;
+  recipient: string;
+  sessionKey: string;
+  distribution: string;
+  title?: string;
+  topic?: string;
+  members?: string[];
+}): Promise<MailboxEnqueue> {
+  const packed = await wrapMailboxInner(
+    opts.recipient,
+    {
+      v: 2,
+      sessionKey: opts.sessionKey,
+      kind: "skdm",
+      body: opts.distribution,
+      title: opts.title,
+      topic: opts.topic,
+      members: opts.members,
+    },
+    [opts.distribution],
+  );
+  if (!packed.ok || !packed.envelope) return packed;
+  inspectRelayInsert({
+    kind: "skdm",
+    sender: opts.sender,
+    recipient: opts.recipient,
+    wire: packed.envelope,
+    secrets: [opts.distribution, opts.title ?? "", opts.topic ?? ""],
+    innerSkdm: opts.distribution,
+    pairwisePrekeysOk: await recipientCanReceiveSignal(opts.recipient),
+  });
+  return insertCiphertextOnly({
+    sender: opts.sender,
+    recipient: opts.recipient,
+    ciphertext: packed.envelope,
+    secrets: [opts.distribution],
+  });
+}
+
+export async function queueRoomMessage(opts: {
+  sender: string;
+  recipient: string;
+  sessionKey: string;
+  body: string;
+  messageId?: string;
+}): Promise<MailboxEnqueue> {
+  const text = opts.body.trim();
+  if (!text) return { ok: false, reason: "error" };
+  const inner = JSON.stringify({
+    v: 2,
+    sessionKey: opts.sessionKey,
+    kind: "text",
+    body: text,
+    messageId: opts.messageId,
+  });
+  const sk = await wrapRoomSenderKeyPayload(opts.sessionKey, opts.sender, inner);
+  if (!sk || !isSignalSenderKeyCiphertext(sk)) {
+    return { ok: false, reason: "pending-keys" };
+  }
+  const packed = await wrapMailboxInner(
+    opts.recipient,
+    {
+      v: 2,
+      sessionKey: opts.sessionKey,
+      kind: "room",
+      body: sk,
+      messageId: opts.messageId,
+    },
+    [text],
+  );
+  if (!packed.ok || !packed.envelope) return packed;
+  inspectRelayInsert({
+    kind: "room",
+    sender: opts.sender,
+    recipient: opts.recipient,
+    wire: packed.envelope,
+    secrets: [text],
+    innerSenderKey: sk,
+    pairwisePrekeysOk: await recipientCanReceiveSignal(opts.recipient),
+  });
+  return insertCiphertextOnly({
+    sender: opts.sender,
+    recipient: opts.recipient,
+    ciphertext: packed.envelope,
+    secrets: [text],
   });
 }
 
@@ -274,6 +397,10 @@ export type FetchedMailbox = {
   messageId?: string;
   pinned?: boolean;
   pinUntil?: number | null;
+  pinAt?: number;
+  title?: string;
+  topic?: string;
+  members?: string[];
 };
 
 const claimedMailboxIds = new Set<string>();
@@ -310,8 +437,16 @@ async function loadAndPurgeMailbox(
       if (!isSignalV2Ciphertext(blob)) continue;
       const opened = await unwrapTextPayload(row.sender_username, blob);
       if (!opened) continue;
-      const meta = parseInner(opened);
+      const meta = parseMailboxPlain(opened);
       if (!meta) continue;
+      if (meta.kind === "skdm" || meta.kind === "room") {
+        inspectClientDecrypt({
+          stage: "pairwise-mailbox",
+          sender: row.sender_username,
+          ok: true,
+          kind: meta.kind,
+        });
+      }
       let fileUrl: string | undefined;
       let fileSize: number | undefined;
       if (row.file_path && meta.kind === "file") {
@@ -348,6 +483,10 @@ async function loadAndPurgeMailbox(
         messageId: meta.messageId,
         pinned: meta.pinned,
         pinUntil: meta.pinUntil,
+        pinAt: meta.pinAt,
+        title: meta.title,
+        topic: meta.topic,
+        members: meta.members,
       });
       await purgeRow(row);
     } catch {

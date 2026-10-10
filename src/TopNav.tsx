@@ -11,9 +11,7 @@ export function TopNav({
   requested = false,
   onRequest,
   memberCount = 1,
-  teamBound = false,
   isGroup = false,
-  teamId = null,
   slug = "",
   takenHandles = [],
   onAdd,
@@ -28,9 +26,7 @@ export function TopNav({
   requested?: boolean;
   onRequest?: () => void;
   memberCount?: number;
-  teamBound?: boolean;
   isGroup?: boolean;
-  teamId?: string | null;
   slug?: string;
   takenHandles?: string[];
   onAdd?: (handle: string) => void;
@@ -47,9 +43,7 @@ export function TopNav({
           requested={requested}
           onRequest={onRequest}
           memberCount={memberCount}
-          teamBound={teamBound}
           isGroup={isGroup}
-          teamId={teamId}
           slug={slug}
           takenHandles={takenHandles}
           onAdd={onAdd}

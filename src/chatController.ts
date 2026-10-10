@@ -8,38 +8,43 @@ import {
 import {
   generateSessionKey,
   newThread,
-  nodeGreetingMessage,
-  type ChatGuest,
   type DmThread,
 } from "./dmSessions";
 
-export const GROUP_AVATAR_COLORS = [
-  "#3f3f46",
-  "#27272a",
-  "#52525b",
-  "#14532d",
-  "#1e3a5f",
-  "#4c1d95",
-  "#7f1d1d",
-  "#854d0e",
-] as const;
-
-export type GroupAvatarChoice = {
-  avatarUrl?: string | null;
-  avatarColor?: string | null;
-};
+export function threadIsRoom(
+  thread: Pick<DmThread, "isGroup" | "roomKind"> | null | undefined,
+): boolean {
+  return Boolean(thread && thread.roomKind === "room");
+}
 
 export function threadIsGroup(
   thread: Pick<DmThread, "isGroup" | "roomKind" | "workspaceId"> | null | undefined,
 ): boolean {
   if (!thread) return false;
+  if (threadIsRoom(thread)) return true;
   if (typeof thread.isGroup === "boolean") return thread.isGroup;
   return thread.roomKind === "team" && !thread.workspaceId;
 }
 
-export function groupInitial(title: string): string {
-  const letter = title.replace(/^@/, "").trim().charAt(0);
-  return letter ? letter.toUpperCase() : "G";
+export function createRoomThread(
+  slug: string,
+  existing: DmThread[],
+  name: string,
+  topic?: string,
+): DmThread {
+  const title = name.trim() || "Room";
+  const sessionKey = generateSessionKey();
+  return {
+    ...newThread(sessionKey, false, "room", undefined, nextChatSeq(slug, existing)),
+    createdBy: slug,
+    isGroup: true,
+    displayName: title,
+    autoNamed: false,
+    renamed: true,
+    description: topic?.trim() || "",
+    handle: "room",
+    skSharedWith: [],
+  };
 }
 
 function normHandle(raw: string, self?: string): string {
@@ -74,44 +79,6 @@ export function createDirectChat(
     ...createEmptyUntitledThread(sessionKey, nextChatSeq(slug, existing), slug),
     isGroup: false,
     displayName: "",
-  };
-}
-
-export function createGroupNode(
-  slug: string,
-  existing: DmThread[],
-  name: string,
-  memberHandles: string[],
-  avatar: GroupAvatarChoice = {},
-  sessionKeyHint?: string,
-): DmThread {
-  const title = name.trim() || "Group Node";
-  const handles = [
-    ...new Set(memberHandles.map((handle) => normHandle(handle, slug)).filter(Boolean)),
-  ];
-  const guests = handles.reduce(
-    (rows, handle) => upsertChatGuest(rows, handle, "handle"),
-    [] as ChatGuest[],
-  );
-  const sessionKey = sessionKeyHint?.trim() || generateSessionKey();
-  return {
-    ...newThread(
-      sessionKey,
-      false,
-      "direct",
-      handles[0],
-      nextChatSeq(slug, existing),
-    ),
-    createdBy: slug,
-    isGroup: true,
-    displayName: title,
-    autoNamed: false,
-    renamed: true,
-    messages: [nodeGreetingMessage(sessionKey)],
-    chatGuests: guests,
-    invitedHandles: guests.map((guest) => guest.handle),
-    avatarUrl: avatar.avatarUrl ?? null,
-    avatarColor: avatar.avatarColor ?? GROUP_AVATAR_COLORS[0],
   };
 }
 

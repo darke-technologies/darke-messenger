@@ -411,21 +411,6 @@ export function SettingsPane({
         <label className="settings-check">
           <input
             type="checkbox"
-            checked={sidebarSections.workspaces}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setSidebarSectionsState((prev) => ({ ...prev, workspaces: next }));
-              void setSidebarSection("workspaces", next).catch((err) => {
-                setSidebarSectionsState((prev) => ({ ...prev, workspaces: !next }));
-                setError(err instanceof Error ? err.message : String(err));
-              });
-            }}
-          />
-          Show Teams in Sidebar
-        </label>
-        <label className="settings-check">
-          <input
-            type="checkbox"
             checked={sidebarSections.entertainment}
             onChange={(e) => {
               const next = e.target.checked;

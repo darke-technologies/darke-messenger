@@ -29,14 +29,14 @@ import {
   rememberJoinKey,
   saveThreads,
   sessionShareLink,
-  teamChatSessionKey,
   writeLastActiveChatId,
   nodeGreetingMessage,
-  makePinNotice,
+  applyThreadPin,
   type ChatFocusDetail,
   type DmMessage,
   type DmThread,
   type RoomKind,
+  type ThreadPinEvent,
   showCopyLinkToast,
 } from "./dmSessions";
 import { bootstrapSignalProtocol } from "./lib/crypto/signal";
@@ -47,48 +47,40 @@ import {
   queueMailboxControl,
   queueMailboxFile,
   queueMailboxMessage,
+  queueRoomMessage,
+  queueRoomSenderKey,
 } from "./mailbox";
+import {
+  createRoomSenderDistribution,
+  processRoomSenderDistribution,
+  unwrapRoomSenderKeyPayload,
+} from "./lib/crypto/signalRooms";
 import {
   addMembersToChat,
   createDirectChat,
-  createGroupNode,
+  createRoomThread,
   threadIsGroup,
-  type GroupAvatarChoice,
+  threadIsRoom,
 } from "./chatController";
+import { useWorkspacesMaybe } from "./WorkspaceContext";
+import { isProPlan } from "./workspaces";
+import { openUpgradeModal } from "./useUpgradeModalStore";
 import {
   migrateChatThreads,
   nextChatSeq,
   createEmptyUntitledThread,
   isFounderThread,
   isChatOwner,
-  listChatGuests,
   listChatMemberHandles,
   normalizeChatGuestHandle,
   sidebarPeerHandle,
+  standaloneJoinBlocked,
 } from "./chatService";
 import {
   ensureFounderSidebarNode,
   withThreadRead,
 } from "./useSidebarStore";
 import { syncChatIndex } from "./searchIndex";
-import {
-  applyMoveMembersToTeam,
-  evaluateMoveToTeam,
-  joinLinkSeatError,
-  loadJoinOrganizationSeats,
-  type TeamMovePreview,
-} from "./teamService";
-import {
-  addTeamChat,
-  ensureTeam,
-  findTeam,
-  removeTeamChat,
-  revokeTeamMember,
-  tryAddTeamMember,
-} from "./teamContainer";
-import { useWorkspacesMaybe } from "./WorkspaceContext";
-import { isProPlan } from "./workspaces";
-import { openUpgradeModal } from "./useUpgradeModalStore";
 import {
   adoptLegacyThreadTitles,
   hydrateLocalChatTitles,
@@ -119,12 +111,6 @@ type DmContextValue = {
   joinError: string | null;
   setActiveId: (id: string | null) => void;
   openNewMessage: () => string;
-  startGroupChat: (
-    name: string,
-    memberHandles: string[],
-    avatar?: GroupAvatarChoice,
-    sessionKey?: string,
-  ) => string;
   generateChatLink: () => void;
   startEncryptedChat: (
     body: string,
@@ -153,6 +139,7 @@ type DmContextValue = {
     pinned?: boolean,
     until?: number | null,
   ) => Promise<void>;
+  applyRemotePin: (event: ThreadPinEvent & { sessionKey?: string }) => void;
   forwardMessages: (messageIds: string[], threadIds: string[]) => Promise<void>;
   receivePeerChat: (
     body: string,
@@ -167,17 +154,9 @@ type DmContextValue = {
   revokeActiveShareLink: () => void;
   purgeActiveHistory: () => void;
   inviteHandle: (handle: string) => void;
-  bindChatToTeam: (
-    chatId: string,
-    teamId?: string | null,
-  ) => { ok: boolean; preview: TeamMovePreview | null };
-  offboardTeamMember: (teamId: string, handle: string) => void;
+  createRoom: (name: string, topic?: string) => string | null;
   guest: boolean;
   slug: string;
-  openTeamChat: (
-    workspace: { id: string; name: string; slug?: string },
-    channel?: { id: string; name: string; slug?: string } | null,
-  ) => void;
 };
 
 const DmContext = createContext<DmContextValue | null>(null);
@@ -203,7 +182,7 @@ export function DmProvider({
   threadsRef.current = threads;
   const sendingIdsRef = useRef(new Set<string>());
   const workspaces = useWorkspacesMaybe();
-  const pro = isProPlan(workspaces?.tier ?? "free");
+  const enterprise = isProPlan(workspaces?.tier ?? "free");
 
   useEffect(() => {
     if (!guest) void bootstrapSignalProtocol().catch(() => null);
@@ -284,11 +263,10 @@ export function DmProvider({
     if (!key) return;
     let cancelled = false;
     void (async () => {
-      const seats = await loadJoinOrganizationSeats();
       if (cancelled) return;
       const existing = threadsRef.current.find((row) => row.sessionKey === key);
       const target = existing ?? findStoredThreadBySessionKey(key);
-      const blocked = joinLinkSeatError(target, seats, slug);
+      const blocked = standaloneJoinBlocked(target, slug);
       if (blocked) {
         setJoinError(blocked);
         rememberJoinKey(null);
@@ -418,93 +396,77 @@ export function DmProvider({
     return shareLink;
   }, [slug]);
 
-  const startGroupChat = useCallback(
-    (
-      name: string,
-      memberHandles: string[],
-      avatar?: GroupAvatarChoice,
-      sessionKey?: string,
-    ) => {
-      const thread = createGroupNode(
-        slug,
-        threadsRef.current,
-        name,
-        memberHandles,
-        avatar,
-        sessionKey,
-      );
-      const shareLink = sessionShareLink(thread.sessionKey);
+  const createRoom = useCallback(
+    (name: string, topic?: string) => {
+      const title = name.trim();
+      if (!title) return null;
+      const owned = threadsRef.current.filter(
+        (row) => threadIsRoom(row) && isChatOwner(row, slug),
+      ).length;
+      if (!enterprise && owned >= 1) {
+        openUpgradeModal("rooms");
+        return null;
+      }
+      const thread = createRoomThread(slug, threadsRef.current, title, topic);
       setThreads((rows) => {
         setActiveId(thread.id);
-        setDraft({ sessionKey: thread.sessionKey, shareLink });
+        setDraft({
+          sessionKey: thread.sessionKey,
+          shareLink: sessionShareLink(thread.sessionKey),
+        });
         setRoomReady(false);
         setCopied(false);
         setJoinError(null);
         return [thread, ...rows];
       });
       if (typeof window !== "undefined") {
-        syncChatUrl({ sessionKey: thread.sessionKey, roomKind: "direct" });
+        syncChatUrl({ sessionKey: thread.sessionKey, roomKind: "room" });
       }
-      return shareLink;
+      void createRoomSenderDistribution(thread.sessionKey, slug);
+      return thread.id;
     },
-    [slug],
+    [enterprise, slug],
   );
 
-  const openTeamChat = useCallback(
-    (
-      workspace: { id: string; name: string; slug?: string },
-      channel?: { id: string; name: string; slug?: string } | null,
-    ) => {
-      const sessionKey = teamChatSessionKey(workspace.id, channel?.id);
-      const shareLink = sessionShareLink(sessionKey);
-      const handle = channel?.slug || workspace.slug || "team";
-      setThreads((rows) => {
-        const existing = rows.find(
-          (row) =>
-            row.sessionKey === sessionKey ||
-            (row.workspaceId === workspace.id &&
-              (row.channelId ?? null) === (channel?.id ?? null)),
-        );
-        if (existing) {
-          const seq = existing.seq ?? nextChatSeq(slug, rows);
-          const next = {
-            ...existing,
-            sessionKey,
-            seq,
-            displayName: "",
-            renamed: false,
-            handle,
-            roomKind: "team" as const,
-            workspaceId: workspace.id,
-            channelId: channel?.id,
-            isGroup: false,
-          };
-          setActiveId(next.id);
-          setDraft({ sessionKey, shareLink });
-          setRoomReady(false);
-          setCopied(false);
-          setJoinError(null);
-          return rows.map((row) => (row.id === existing.id ? next : row));
-        }
-        const seq = nextChatSeq(slug, rows);
-        const thread: DmThread = {
-          ...newThread(sessionKey, false, "team", undefined, seq),
-          handle,
-          createdBy: slug,
-          workspaceId: workspace.id,
-          channelId: channel?.id,
-          isGroup: false,
-        };
-        setActiveId(thread.id);
-        setDraft({ sessionKey, shareLink });
-        setRoomReady(false);
-        setCopied(false);
-        setJoinError(null);
-        return [thread, ...rows];
-      });
-      if (typeof window !== "undefined") {
-        syncChatUrl({ sessionKey, roomKind: "team" });
+  const shareRoomSenderKey = useCallback(
+    async (thread: DmThread, recipients: string[]) => {
+      const distribution = await createRoomSenderDistribution(
+        thread.sessionKey,
+        slug,
+      );
+      if (!distribution) return;
+      const members = listChatMemberHandles(thread, slug);
+      const already = new Set(
+        (thread.skSharedWith ?? []).map((row) =>
+          normalizeChatGuestHandle(row),
+        ),
+      );
+      const sent: string[] = [];
+      for (const raw of recipients) {
+        const handle = normalizeChatGuestHandle(raw);
+        if (!handle || handle === slug || already.has(handle)) continue;
+        const queued = await queueRoomSenderKey({
+          sender: slug,
+          recipient: handle,
+          sessionKey: thread.sessionKey,
+          distribution,
+          title: thread.displayName,
+          topic: thread.description,
+          members,
+        });
+        if (queued.ok) sent.push(handle);
       }
+      if (!sent.length) return;
+      setThreads((rows) =>
+        rows.map((row) =>
+          row.id === thread.id
+            ? {
+                ...row,
+                skSharedWith: [...(row.skSharedWith ?? []), ...sent],
+              }
+            : row,
+        ),
+      );
     },
     [slug],
   );
@@ -603,58 +565,30 @@ export function DmProvider({
       setJoinError("Enter a chat key or link like 0x…");
       return false;
     }
-    const existing = threadsRef.current.find((row) => row.sessionKey === key);
-    const target = existing ?? findStoredThreadBySessionKey(key);
-
     const sessionKey = key;
-    function commitJoin() {
-      setJoinError(null);
-      setThreads((rows) => {
-        const found = rows.find((item) => item.sessionKey === sessionKey);
-        if (found) {
-          setActiveId(found.id);
-          return rows.map((row) =>
-            row.id === found.id
-              ? { ...row, connectionState: "CONNECTED" as const }
-              : row,
-          );
-        }
-        const thread = newThread(
-          sessionKey,
-          true,
-          undefined,
-          undefined,
-          nextChatSeq(slug, rows),
+    setJoinError(null);
+    setThreads((rows) => {
+      const found = rows.find((item) => item.sessionKey === sessionKey);
+      if (found) {
+        setActiveId(found.id);
+        return rows.map((row) =>
+          row.id === found.id
+            ? { ...row, connectionState: "CONNECTED" as const }
+            : row,
         );
-        setActiveId(thread.id);
-        return [thread, ...rows];
-      });
-    }
-
-    void loadJoinOrganizationSeats()
-      .then((seats) => {
-        const blocked = joinLinkSeatError(target, seats, slug, pro);
-        if (blocked) {
-          setJoinError(blocked);
-          return;
-        }
-        commitJoin();
-      })
-      .catch(() => {
-        const blocked = joinLinkSeatError(
-          target,
-          { seatsUsed: 1, maxSeats: 1 },
-          slug,
-          pro,
-        );
-        if (blocked) {
-          setJoinError(blocked);
-          return;
-        }
-        commitJoin();
-      });
+      }
+      const thread = newThread(
+        sessionKey,
+        true,
+        undefined,
+        undefined,
+        nextChatSeq(slug, rows),
+      );
+      setActiveId(thread.id);
+      return [thread, ...rows];
+    });
     return true;
-  }, [slug, pro]);
+  }, [slug]);
 
   const sendChat = useCallback(
     async (body: string, opts?: { mailbox?: boolean; file?: File; replyToMessageId?: string; threadId?: string }) => {
@@ -665,6 +599,7 @@ export function DmProvider({
       const localId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const fileUrl = file ? URL.createObjectURL(file) : undefined;
       const thread = threadsRef.current.find((row) => row.id === targetId);
+      if (thread && threadIsRoom(thread) && file) return;
       const quoted = opts?.replyToMessageId
         ? thread?.messages.find((msg) => msg.id === opts.replyToMessageId)
         : undefined;
@@ -693,6 +628,47 @@ export function DmProvider({
       );
       if (!opts?.mailbox || guest) return;
       sendingIdsRef.current.add(localId);
+      if (thread && threadIsRoom(thread)) {
+        const members = listChatMemberHandles(thread, slug).filter(
+          (handle) => handle !== slug,
+        );
+        await shareRoomSenderKey(thread, members);
+        let ok = members.length === 0;
+        for (const recipient of members) {
+          const queued = await queueRoomMessage({
+            sender: slug,
+            recipient,
+            sessionKey: thread.sessionKey,
+            body: text,
+            messageId: localId,
+          }).catch((): { ok: false; reason: "error" } => ({
+            ok: false,
+            reason: "error",
+          }));
+          if (queued.ok) ok = true;
+        }
+        sendingIdsRef.current.delete(localId);
+        setThreads((rows) =>
+          rows.map((row) =>
+            row.id === targetId
+              ? {
+                  ...row,
+                  messages: row.messages.map((msg) =>
+                    msg.id === localId
+                      ? {
+                          ...msg,
+                          relay: ok
+                            ? ("mailbox" as const)
+                            : ("pending-keys" as const),
+                        }
+                      : msg,
+                  ),
+                }
+              : row,
+          ),
+        );
+        return;
+      }
       const recipient =
         (thread ? sidebarPeerHandle(thread, slug) : null) ||
         thread?.peerUsername ||
@@ -756,7 +732,7 @@ export function DmProvider({
       );
       sendingIdsRef.current.delete(localId);
     },
-    [activeId, guest, slug],
+    [activeId, guest, shareRoomSenderKey, slug],
   );
 
   const peersForThread = useCallback(
@@ -855,31 +831,57 @@ export function DmProvider({
     [activeId, guest, peersForThread, slug],
   );
 
+  const findPinThread = useCallback(
+    (rows: DmThread[], sessionKey: string | undefined, sender: string) => {
+      const key =
+        normalizeSessionKey(sessionKey || "") ?? sessionKey ?? "";
+      const who = sender.replace(/^@/, "").trim().toLowerCase();
+      return (
+        rows.find(
+          (row) =>
+            key &&
+            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key,
+        ) ??
+        rows.find(
+          (row) =>
+            !threadIsGroup(row) && sidebarPeerHandle(row, slug) === who,
+        ) ??
+        rows.find((row) => {
+          if (threadIsGroup(row)) return false;
+          const peer = (row.peerUsername || row.handle || "")
+            .replace(/^@/, "")
+            .trim()
+            .toLowerCase();
+          return Boolean(who) && peer === who;
+        }) ??
+        null
+      );
+    },
+    [slug],
+  );
+
   const pinMessage = useCallback(
     async (messageId: string, pinned = true, until: number | null = null) => {
       if (!activeId) return;
       const thread = threadsRef.current.find((row) => row.id === activeId);
       if (!thread) return;
       const who = slug.replace(/^@/, "").trim().toLowerCase();
+      const current = thread.messages.find((msg) => msg.id === messageId);
+      const snippet = (current?.fileName || current?.body || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const event: ThreadPinEvent = {
+        pinned,
+        by: who,
+        messageId,
+        pinUntil: pinned ? until : null,
+        snippet,
+        pinAt: current?.at,
+      };
       setThreads((rows) =>
-        rows.map((row) => {
-          if (row.id !== activeId) return row;
-          const next: DmThread = {
-            ...row,
-            pinnedMessageId: pinned ? messageId : null,
-            pinnedBy: pinned ? who : null,
-            pinnedUntil: pinned ? until : null,
-            messages: row.messages.map((msg) => ({
-              ...msg,
-              pinned: pinned ? msg.id === messageId : false,
-            })),
-          };
-          if (!pinned) return next;
-          return {
-            ...next,
-            messages: [...next.messages, makePinNotice({ messageId, by: who })],
-          };
-        }),
+        rows.map((row) =>
+          row.id === activeId ? applyThreadPin(row, event) : row,
+        ),
       );
       if (guest) return;
       await Promise.all(
@@ -890,13 +892,32 @@ export function DmProvider({
             sessionKey: thread.sessionKey,
             kind: "pin",
             messageId,
+            body: snippet,
             pinned,
             pinUntil: pinned ? until : null,
+            pinAt: current?.at,
           }).catch(() => null),
         ),
       );
     },
     [activeId, guest, peersForThread, slug],
+  );
+
+  const applyRemotePin = useCallback(
+    (event: ThreadPinEvent & { sessionKey?: string }) => {
+      const who = event.by.replace(/^@/, "").trim().toLowerCase();
+      if (!who || who === slug.replace(/^@/, "").trim().toLowerCase()) return;
+      setThreads((rows) => {
+        const existing = findPinThread(rows, event.sessionKey, who);
+        if (!existing) return rows;
+        return rows.map((row) =>
+          row.id === existing.id
+            ? applyThreadPin(row, { ...event, by: who })
+            : row,
+        );
+      });
+    },
+    [findPinThread, slug],
   );
 
   const forwardMessages = useCallback(
@@ -950,11 +971,124 @@ export function DmProvider({
   const ingestMailbox = useCallback(async () => {
     const incoming = await fetchAndPurgeMailbox(slug).catch(() => []);
     if (!incoming.length) return;
+    for (const item of incoming) {
+      if (item.kind !== "skdm") continue;
+      const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
+      await processRoomSenderDistribution(key, item.sender, item.body);
+    }
+    const roomPlain = new Map<string, string>();
+    for (const item of incoming) {
+      if (item.kind !== "room") continue;
+      const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
+      const opened = await unwrapRoomSenderKeyPayload(
+        key,
+        item.sender,
+        item.body,
+      );
+      if (opened) roomPlain.set(item.id, opened);
+    }
     setThreads((rows) => {
       let next = rows;
       for (const item of incoming) {
         const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
         const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
+        if (item.kind === "skdm") {
+          const members = [
+            ...new Set(
+              [sender, slug, ...(item.members ?? [])].map((row) =>
+                normalizeChatGuestHandle(row),
+              ),
+            ),
+          ].filter(Boolean);
+          const found = next.find(
+            (row) => row.sessionKey === key || row.id === key,
+          );
+          if (found) {
+            next = next.map((row) =>
+              row.id === found.id
+                ? addMembersToChat(
+                    {
+                      ...row,
+                      displayName: item.title?.trim() || row.displayName,
+                      description: item.topic ?? row.description,
+                      roomKind: "room",
+                      isGroup: true,
+                    },
+                    members,
+                    slug,
+                  )
+                : row,
+            );
+          } else {
+            const seeded = addMembersToChat(
+              {
+                ...createRoomThread(
+                  slug,
+                  next,
+                  item.title?.trim() || "Room",
+                  item.topic,
+                ),
+                id: key,
+                sessionKey: key,
+              },
+              members,
+              slug,
+            );
+            next = [seeded, ...next];
+          }
+          const live =
+            next.find((row) => row.sessionKey === key || row.id === key) ??
+            null;
+          if (live) void shareRoomSenderKey(live, members);
+          continue;
+        }
+        if (item.kind === "room") {
+          const plain = roomPlain.get(item.id);
+          if (!plain) continue;
+          let innerBody = plain;
+          let innerId = item.messageId;
+          try {
+            const parsed = JSON.parse(plain) as {
+              body?: string;
+              messageId?: string;
+            };
+            if (typeof parsed.body === "string") innerBody = parsed.body;
+            if (typeof parsed.messageId === "string") innerId = parsed.messageId;
+          } catch {
+            innerBody = plain;
+          }
+          const found =
+            next.find((row) => row.sessionKey === key) ??
+            next.find((row) => row.id === key);
+          if (!found) continue;
+          if (
+            found.messages.some(
+              (msg) =>
+                msg.pendingId === item.id || (innerId && msg.id === innerId),
+            )
+          ) {
+            continue;
+          }
+          const message: DmMessage = {
+            id: innerId || `mb-${item.id}`,
+            direction: "received",
+            body: innerBody,
+            at: item.at,
+            e2ee: true,
+            pendingId: item.id,
+          };
+          const activeHere = found.id === activeId;
+          next = next.map((row) =>
+            row.id === found.id
+              ? {
+                  ...row,
+                  messages: [...row.messages, message],
+                  unread: activeHere ? 0 : (row.unread ?? 0) + 1,
+                }
+              : row,
+          );
+          continue;
+        }
         const existing =
           next.find((row) => row.sessionKey === key) ??
           next.find(
@@ -993,34 +1127,21 @@ export function DmProvider({
           continue;
         }
         if (item.kind === "pin") {
-          if (!existing) continue;
-          const on = item.pinned !== false;
-          const targetId = item.messageId || existing.pinnedMessageId || "";
-          next = next.map((row) => {
-            if (row.id !== existing.id) return row;
-            const pinnedRow: DmThread = {
-              ...row,
-              pinnedMessageId: on ? targetId || row.pinnedMessageId : null,
-              pinnedBy: on ? sender : null,
-              pinnedUntil: on ? item.pinUntil ?? null : null,
-              messages: row.messages.map((msg) => ({
-                ...msg,
-                pinned: on && Boolean(targetId) && msg.id === targetId,
-              })),
-            };
-            if (!on) return pinnedRow;
-            return {
-              ...pinnedRow,
-              messages: [
-                ...pinnedRow.messages,
-                makePinNotice({
-                  messageId: targetId,
+          const thread =
+            existing ?? findPinThread(next, item.sessionKey, sender);
+          if (!thread) continue;
+          next = next.map((row) =>
+            row.id === thread.id
+              ? applyThreadPin(row, {
+                  pinned: item.pinned !== false,
                   by: sender,
-                  at: item.at,
-                }),
-              ],
-            };
-          });
+                  messageId: item.messageId,
+                  pinUntil: item.pinUntil,
+                  snippet: item.body,
+                  pinAt: item.pinAt,
+                })
+              : row,
+          );
           continue;
         }
         const message: DmMessage = {
@@ -1077,7 +1198,7 @@ export function DmProvider({
       }
       return next;
     });
-  }, [slug, activeId]);
+  }, [slug, activeId, findPinThread, shareRoomSenderKey]);
 
   useEffect(() => {
     if (guest) return;
@@ -1127,6 +1248,7 @@ export function DmProvider({
           thread.peerUsername ||
           peerUsernameFromHandle(thread.handle ?? "");
         if (!recipient) continue;
+        if (threadIsRoom(thread)) continue;
         for (const msg of thread.messages) {
           if (cancelled) return;
           if (msg.direction !== "sent" || msg.relay !== "pending-keys") continue;
@@ -1250,7 +1372,6 @@ export function DmProvider({
 
   const deleteThread = useCallback(
     (id: string) => {
-      removeTeamChat(slug, id);
       setThreads((rows) => {
         const next = rows.filter((row) => row.id !== id);
         if (activeId === id) {
@@ -1297,76 +1418,20 @@ export function DmProvider({
     (raw: string) => {
       const handle = raw.replace(/^@/, "").trim().toLowerCase();
       if (!handle || !activeId) return;
+      const current = threadsRef.current.find((row) => row.id === activeId);
       setThreads((rows) =>
         rows.map((row) => {
           if (row.id !== activeId) return row;
           if (!isChatOwner(row, slug)) return row;
-          if (row.teamId) {
-            const result = tryAddTeamMember(slug, handle, pro, row.teamId);
-            if (result.blocked) {
-              openUpgradeModal("team");
-              return row;
-            }
-          }
           return addMembersToChat(row, [handle], slug);
         }),
       );
+      if (current && threadIsRoom(current)) {
+        const next = addMembersToChat(current, [handle], slug);
+        void shareRoomSenderKey(next, [handle]);
+      }
     },
-    [activeId, slug, pro],
-  );
-
-  const bindChatToTeam = useCallback(
-    (chatId: string, teamId?: string | null) => {
-      if (!chatId) return { ok: false, preview: null };
-      const thread = threadsRef.current.find((row) => row.id === chatId) ?? null;
-      const team = teamId
-        ? (findTeam(slug, teamId) ?? ensureTeam(slug))
-        : ensureTeam(slug);
-      const preview = evaluateMoveToTeam(slug, thread, team.id, pro);
-      if (!preview) return { ok: false, preview: null };
-      if (preview.blocked) return { ok: false, preview };
-      applyMoveMembersToTeam(slug, preview);
-      const nextTeam = findTeam(slug, team.id) ?? team;
-      const handles = nextTeam.members.map((row) => row.handle);
-      setThreads((rows) =>
-        rows.map((row) => {
-          if (row.id !== chatId) return row;
-          const next = { ...row, teamId: nextTeam.id };
-          return addMembersToChat(next, handles, slug);
-        }),
-      );
-      addTeamChat(slug, chatId, nextTeam.id);
-      return { ok: true, preview };
-    },
-    [slug, pro],
-  );
-
-  const offboardTeamMember = useCallback(
-    (teamId: string, handle: string) => {
-      const id = normalizeChatGuestHandle(handle);
-      if (!teamId || !id) return;
-      const { chatIds } = revokeTeamMember(slug, teamId, id);
-      setThreads((rows) =>
-        rows.map((row) => {
-          if (row.teamId !== teamId && !chatIds.includes(row.id)) return row;
-          const guests = listChatGuests(row).filter(
-            (guest) => normalizeChatGuestHandle(guest.handle) !== id,
-          );
-          const sessionKey = generateSessionKey();
-          return {
-            ...row,
-            sessionKey,
-            chatGuests: guests,
-            invitedHandles: guests.map((guest) => guest.handle),
-            peerUsername:
-              normalizeChatGuestHandle(row.peerUsername ?? "") === id
-                ? guests[0]?.handle
-                : row.peerUsername,
-          };
-        }),
-      );
-    },
-    [slug],
+    [activeId, shareRoomSenderKey, slug],
   );
 
   const selectThread = useCallback((id: string | null) => {
@@ -1398,7 +1463,6 @@ export function DmProvider({
       roomReady,
       setActiveId: selectThread,
       openNewMessage,
-      startGroupChat,
       generateChatLink,
       startEncryptedChat,
       dismissRoomReady,
@@ -1408,6 +1472,7 @@ export function DmProvider({
       editMessage,
       deleteMessages,
       pinMessage,
+      applyRemotePin,
       forwardMessages,
       receivePeerChat,
       renameActive,
@@ -1419,11 +1484,9 @@ export function DmProvider({
       revokeActiveShareLink,
       purgeActiveHistory,
       inviteHandle,
-      bindChatToTeam,
-      offboardTeamMember,
+      createRoom,
       guest,
       slug,
-      openTeamChat,
     }),
     [
       threads,
@@ -1435,7 +1498,6 @@ export function DmProvider({
       roomReady,
       selectThread,
       openNewMessage,
-      startGroupChat,
       generateChatLink,
       startEncryptedChat,
       dismissRoomReady,
@@ -1445,6 +1507,7 @@ export function DmProvider({
       editMessage,
       deleteMessages,
       pinMessage,
+      applyRemotePin,
       forwardMessages,
       receivePeerChat,
       renameActive,
@@ -1456,11 +1519,9 @@ export function DmProvider({
       revokeActiveShareLink,
       purgeActiveHistory,
       inviteHandle,
-      bindChatToTeam,
-      offboardTeamMember,
+      createRoom,
       guest,
       slug,
-      openTeamChat,
     ],
   );
 

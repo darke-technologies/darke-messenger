@@ -414,9 +414,7 @@ export function ConversationSettings({
           onClose={() => setInviteOpen(false)}
           canCopy={canInvite}
           memberCount={chatMemberCount(thread, slug)}
-          teamBound={Boolean(thread.teamId)}
           isGroup={group}
-          teamId={thread.teamId ?? null}
           slug={slug}
           takenHandles={handles}
           onAdd={inviteHandle}
