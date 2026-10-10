@@ -122,6 +122,22 @@ export function createDirectChat(
   };
 }
 
+export function withRoomTitle(
+  thread: DmThread,
+  title?: string | null,
+  topic?: string | null,
+): DmThread {
+  const named = title?.replace(/\s+/g, " ").trim() ?? "";
+  if (!named && topic == null) return thread;
+  return {
+    ...thread,
+    displayName: named || thread.displayName,
+    autoNamed: named ? false : thread.autoNamed,
+    renamed: named ? true : thread.renamed,
+    description: topic ?? thread.description,
+  };
+}
+
 export function addMembersToChat(
   thread: DmThread,
   rawHandles: string[],

@@ -12,7 +12,7 @@ import {
   sidebarUnreadCount,
 } from "./useSidebarStore";
 import { NewChatPanel } from "./NewChatPanel";
-import { IconPin, IconSearch } from "./icons";
+import { IconPin } from "./icons";
 import { focusChatMessage, openConversationSettings } from "./dmSessions";
 import { AppHeader } from "./SidebarHeader";
 import { SidebarChatItem } from "./SidebarChatItem";
@@ -51,7 +51,6 @@ export function ChatSidebar({
   } = useDm();
   const localChat = useLocalChat(slug);
   const [newChatOpen, setNewChatOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const [lane, setLane] = useState<"messages" | "rooms">("messages");
   const [menu, setMenu] = useState<{
     chatId: string;
@@ -81,7 +80,6 @@ export function ChatSidebar({
         .sort((a, b) => threadLastActivityAt(b) - threadLastActivityAt(a)),
     [threads],
   );
-  const q = query.trim().toLowerCase();
   const directoryHandles = useMemo(() => {
     const rows = [slug];
     for (const thread of threads) {
@@ -92,23 +90,8 @@ export function ChatSidebar({
   const people = usePersonDirectory(directoryHandles);
   void people.version;
 
-  function chatMatches(thread: DmThread) {
-    if (!q) return true;
-    const label = sidebarRowLabel(thread, slug, localChat.peek(thread.id)).toLowerCase();
-    const preview = sidebarRowPreview(thread, slug).toLowerCase();
-    const handles = listChatMemberHandles(thread, slug);
-    const names = handles.some((handle) => {
-      const person = people.person(handle);
-      const display = (person?.displayName || handle).toLowerCase();
-      const user = handle.replace(/^@/, "").trim().toLowerCase();
-      return display.includes(q) || user.includes(q) || `@${user}`.includes(q);
-    });
-    return label.includes(q) || preview.includes(q) || names;
-  }
-
-  const visibleRecent = (q ? recent.filter(chatMatches) : recent).filter(
-    (thread) =>
-      lane === "rooms" ? threadIsRoom(thread) : !threadIsGroup(thread),
+  const visibleRecent = recent.filter((thread) =>
+    lane === "rooms" ? threadIsRoom(thread) : !threadIsGroup(thread),
   );
 
   function renderChatRow(thread: DmThread) {
@@ -200,16 +183,6 @@ export function ChatSidebar({
             </button>
           ))}
         </div>
-        <div className="dm-nav-search">
-          <IconSearch className="dm-nav-search-icon" />
-          <input
-            className="dm-nav-search-input"
-            value={query}
-            placeholder="Search"
-            aria-label="Search chats"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
       </div>
 
       <div className="dm-nav-scroll">
@@ -217,11 +190,7 @@ export function ChatSidebar({
         <div className="dm-nav-list">
           {visibleRecent.length === 0 ? (
             <p className="muted msg-nav-empty">
-              {q
-                ? "No matching chats."
-                : lane === "rooms"
-                  ? "No rooms yet."
-                  : "No chats yet."}
+              {lane === "rooms" ? "No rooms yet." : "No chats yet."}
             </p>
           ) : (
             visibleRecent.map((thread) => renderChatRow(thread))

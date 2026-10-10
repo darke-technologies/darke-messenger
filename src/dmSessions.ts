@@ -223,7 +223,11 @@ export function sessionShareLink(sessionKey: string): string {
   return `${JOIN_ORIGIN}/join#${sessionKey}`;
 }
 
-export type RoomInvite = { sessionKey: string; host: string };
+export type RoomInvite = { sessionKey: string; host: string; name?: string };
+
+function clipRoomInviteName(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().slice(0, 80);
+}
 
 const ROOM_JOIN_STORAGE = "darke.room.join";
 
@@ -235,10 +239,18 @@ function joinOrigin(): string {
 }
 
 /** Signal room invite. Does not embed Sender Keys — host admits via pairwise SKDM. */
-export function roomShareLink(sessionKey: string, host: string): string {
+export function roomShareLink(
+  sessionKey: string,
+  host: string,
+  name?: string,
+): string {
   const key = normalizeSessionKey(sessionKey) ?? sessionKey.trim();
   const owner = host.replace(/^@/, "").trim().toLowerCase();
-  return `${joinOrigin()}/app#darke-room=${encodeURIComponent(key)}&host=${encodeURIComponent(owner)}`;
+  const title = clipRoomInviteName(name ?? "");
+  const named = title
+    ? `&name=${encodeURIComponent(title)}`
+    : "";
+  return `${joinOrigin()}/app#darke-room=${encodeURIComponent(key)}&host=${encodeURIComponent(owner)}${named}`;
 }
 
 export function parseRoomInvite(raw = ""): RoomInvite | null {
@@ -257,7 +269,10 @@ export function parseRoomInvite(raw = ""): RoomInvite | null {
     const host = (params.get("host") || "").replace(/^@/, "").trim().toLowerCase();
     const sessionKey = normalizeSessionKey(room ?? "");
     if (!sessionKey || !host) return null;
-    return { sessionKey, host };
+    const name = clipRoomInviteName(
+      params.get("name") || params.get("title") || "",
+    );
+    return { sessionKey, host, name: name || undefined };
   } catch {
     return null;
   }
@@ -277,9 +292,12 @@ export function readRoomInviteFromLocation(): RoomInvite | null {
 export function rememberRoomInvite(invite: RoomInvite | null): void {
   try {
     if (invite) {
+      const named = invite.name
+        ? `&name=${encodeURIComponent(invite.name)}`
+        : "";
       sessionStorage.setItem(
         ROOM_JOIN_STORAGE,
-        `darke-room=${invite.sessionKey}&host=${invite.host}`,
+        `darke-room=${invite.sessionKey}&host=${invite.host}${named}`,
       );
     } else {
       sessionStorage.removeItem(ROOM_JOIN_STORAGE);

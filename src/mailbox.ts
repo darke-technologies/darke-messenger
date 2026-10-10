@@ -307,6 +307,7 @@ export async function queueRoomMessage(opts: {
   sessionKey: string;
   body: string;
   messageId?: string;
+  title?: string;
 }): Promise<MailboxEnqueue> {
   if (isReservedMailboxHandle(opts.recipient)) {
     return { ok: false, reason: "error" };
@@ -332,6 +333,7 @@ export async function queueRoomMessage(opts: {
       kind: "room",
       body: sk,
       messageId: opts.messageId,
+      title: opts.title?.trim() || undefined,
     },
     [text],
   );

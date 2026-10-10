@@ -798,7 +798,11 @@ export function ChatView() {
         <InviteModal
           shareLink={
             threadIsRoom(active)
-              ? roomShareLink(active.sessionKey, active.createdBy || slug)
+              ? roomShareLink(
+                  active.sessionKey,
+                  active.createdBy || slug,
+                  active.displayName,
+                )
               : sessionShareLink(active.sessionKey)
           }
           copied={copied}

@@ -66,6 +66,7 @@ import {
   createRoomThread,
   threadIsGroup,
   threadIsRoom,
+  withRoomTitle,
 } from "./chatController";
 import { useWorkspacesMaybe } from "./WorkspaceContext";
 import { isProPlan } from "./workspaces";
@@ -324,19 +325,29 @@ export function DmProvider({
         rows.find((row) => row.sessionKey === key && threadIsRoom(row)) ??
         rows.find((row) => row.sessionKey === key);
       if (found) {
-        const next = threadIsRoom(found)
-          ? found
-          : { ...found, roomKind: "room" as const, isGroup: true, handle: "room" };
+        const next = withRoomTitle(
+          threadIsRoom(found)
+            ? found
+            : { ...found, roomKind: "room" as const, isGroup: true, handle: "room" },
+          invite.name,
+        );
         setActiveId(found.id);
         setDraft({
           sessionKey: key,
-          shareLink: roomShareLink(key, found.createdBy || host),
+          shareLink: roomShareLink(
+            key,
+            found.createdBy || host,
+            invite.name || found.displayName,
+          ),
         });
         return rows.map((row) => (row.id === found.id ? next : row));
       }
-      const thread = adoptRoomThread(slug, rows, key, host);
+      const thread = adoptRoomThread(slug, rows, key, host, invite.name);
       setActiveId(thread.id);
-      setDraft({ sessionKey: key, shareLink: roomShareLink(key, host) });
+      setDraft({
+        sessionKey: key,
+        shareLink: roomShareLink(key, host, invite.name),
+      });
       return [thread, ...rows];
     });
     if (host && host !== slug) {
@@ -456,7 +467,11 @@ export function DmProvider({
         setActiveId(thread.id);
         setDraft({
           sessionKey: thread.sessionKey,
-          shareLink: roomShareLink(thread.sessionKey, slug),
+          shareLink: roomShareLink(
+            thread.sessionKey,
+            slug,
+            thread.displayName,
+          ),
         });
         setRoomReady(false);
         setCopied(false);
@@ -577,7 +592,11 @@ export function DmProvider({
     setDraft({
       sessionKey: row.sessionKey,
       shareLink: threadIsRoom(row)
-        ? roomShareLink(row.sessionKey, row.createdBy || slug)
+        ? roomShareLink(
+            row.sessionKey,
+            row.createdBy || slug,
+            row.displayName,
+          )
         : sessionShareLink(row.sessionKey),
     });
     syncChatUrl(row);
@@ -593,7 +612,11 @@ export function DmProvider({
     if (!isChatOwner(row ?? null, slug)) return;
     const link = row
       ? threadIsRoom(row)
-        ? roomShareLink(row.sessionKey, row.createdBy || slug)
+        ? roomShareLink(
+            row.sessionKey,
+            row.createdBy || slug,
+            row.displayName,
+          )
         : sessionShareLink(row.sessionKey)
       : draft?.shareLink;
     if (!link) return;
@@ -689,6 +712,7 @@ export function DmProvider({
             sessionKey: thread.sessionKey,
             body: text,
             messageId: localId,
+            title: thread.displayName,
           }).catch((): { ok: false; reason: "error" } => ({
             ok: false,
             reason: "error",
@@ -1067,13 +1091,15 @@ export function DmProvider({
             next = next.map((row) =>
               row.id === found.id
                 ? addMembersToChat(
-                    {
-                      ...row,
-                      displayName: item.title?.trim() || row.displayName,
-                      description: item.topic ?? row.description,
-                      roomKind: "room",
-                      isGroup: true,
-                    },
+                    withRoomTitle(
+                      {
+                        ...row,
+                        roomKind: "room",
+                        isGroup: true,
+                      },
+                      item.title,
+                      item.topic,
+                    ),
                     members,
                     slug,
                   )
@@ -1132,6 +1158,9 @@ export function DmProvider({
               slug,
             );
             next = [found, ...next];
+          } else if (item.title?.trim()) {
+            found = withRoomTitle(found, item.title, item.topic);
+            next = next.map((row) => (row.id === found!.id ? found! : row));
           }
           if (
             found.messages.some(
@@ -1336,6 +1365,7 @@ export function DmProvider({
                   sessionKey: thread.sessionKey,
                   body: msg.body,
                   messageId: msg.id,
+                  title: thread.displayName,
                 });
                 if (queued.ok) {
                   ok = true;

@@ -74,7 +74,11 @@ export function ConversationSettings({
   const youFp = nodeFingerprint(`${thread.sessionKey}:you:${slug}`);
   const peerFp = nodeFingerprint(`${thread.sessionKey}:peer:${peer || "peer"}`);
   const shareLink = room
-    ? roomShareLink(thread.sessionKey, thread.createdBy || slug)
+    ? roomShareLink(
+        thread.sessionKey,
+        thread.createdBy || slug,
+        thread.displayName,
+      )
     : sessionShareLink(thread.sessionKey);
   const searchHits = useMemo(() => {
     const q = query.trim().toLowerCase();
