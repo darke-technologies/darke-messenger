@@ -181,20 +181,34 @@ async function roomGroupSession(groupId: string, sender: string) {
   return { store, name, ...session };
 }
 
-export function isSignalSenderKeyCiphertext(raw: string): boolean {
+export function parseSenderKeyEnvelope(raw: string): SenderKeyEnvelope | null {
   try {
     const parsed = JSON.parse(raw) as Partial<SenderKeyEnvelope>;
-    return (
-      parsed.v === 2 &&
-      parsed.proto === "signal-sk" &&
-      typeof parsed.groupId === "string" &&
-      typeof parsed.sender === "string" &&
-      typeof parsed.body === "string" &&
-      parsed.body.length > 8
-    );
+    if (
+      parsed.v !== 2 ||
+      parsed.proto !== "signal-sk" ||
+      typeof parsed.groupId !== "string" ||
+      typeof parsed.sender !== "string" ||
+      typeof parsed.body !== "string" ||
+      parsed.body.length <= 8
+    ) {
+      return null;
+    }
+    return {
+      v: 2,
+      proto: "signal-sk",
+      groupId: parsed.groupId,
+      sender: parsed.sender,
+      body: parsed.body,
+      skdm: typeof parsed.skdm === "string" && parsed.skdm ? parsed.skdm : undefined,
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function isSignalSenderKeyCiphertext(raw: string): boolean {
+  return Boolean(parseSenderKeyEnvelope(raw));
 }
 
 export async function createRoomSenderDistribution(
@@ -279,19 +293,21 @@ export async function unwrapRoomSenderKeyPayload(
   const who = toSlug(sender);
   if (!groupId || !who) return null;
   try {
-    const parsed = JSON.parse(payload) as SenderKeyEnvelope;
+    const parsed = parseSenderKeyEnvelope(payload);
+    if (!parsed) return null;
     const from = parsed.sender ? toSlug(parsed.sender) : who;
     const ids = [...new Set([groupId, parsed.groupId].filter(Boolean))];
-    if (parsed.skdm) {
-      for (const gid of ids) {
-        await processRoomSenderDistribution(gid, from, parsed.skdm);
-      }
-    }
     let text: string | null = null;
     for (const gid of ids) {
-      const { name, cipher } = await roomGroupSession(gid, from);
+      const { name, cipher, builder } = await roomGroupSession(gid, from);
       text = await withSkLock(name.toString(), async () => {
         try {
+          if (parsed.skdm) {
+            const skdm = SenderKeyDistributionMessage.deserialize(
+              b64ToBytes(parsed.skdm),
+            );
+            await builder.process(name, skdm);
+          }
           const plain = await cipher.decrypt(b64ToBytes(parsed.body));
           return new TextDecoder().decode(packedBytes(plain));
         } catch {

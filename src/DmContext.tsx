@@ -563,6 +563,16 @@ export function DmProvider({
 
   useEffect(() => {
     if (guest) return;
+    for (const thread of threads) {
+      if (!threadIsRoom(thread)) continue;
+      const recipients = roomRecipientHandles(thread, slug);
+      if (!recipients.length) continue;
+      void shareRoomSenderKey(thread, recipients);
+    }
+  }, [guest, shareRoomSenderKey, slug, threads]);
+
+  useEffect(() => {
+    if (guest) return;
     const pending = peekPendingLaunch();
     if (pending) {
       startEncryptedChat(

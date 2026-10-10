@@ -8,6 +8,7 @@ import {
 } from "./lib/crypto/signal";
 import {
   isSignalSenderKeyCiphertext,
+  parseSenderKeyEnvelope,
   processRoomSenderDistribution,
   unwrapRoomSenderKeyPayload,
   wrapRoomSenderKeyPayload,
@@ -541,20 +542,13 @@ async function loadAndPurgeMailbox(
       if (claimedMailboxIds.has(row.id)) continue;
       const blob = row.encrypted_content ?? "";
       if (isSignalSenderKeyCiphertext(blob)) {
-        let sessionKey = "";
-        try {
-          const parsed = JSON.parse(blob) as { groupId?: string };
-          sessionKey =
-            typeof parsed.groupId === "string" ? parsed.groupId : "";
-        } catch {
-          sessionKey = "";
-        }
-        if (!sessionKey) continue;
+        const parsed = parseSenderKeyEnvelope(blob);
+        if (!parsed) continue;
         deferred.push({
           row,
           meta: {
             v: 2,
-            sessionKey,
+            sessionKey: parsed.groupId,
             kind: "room",
             body: blob,
           },
@@ -632,12 +626,45 @@ async function loadAndPurgeMailbox(
 
   for (const item of deferred) {
     if (item.meta.kind !== "room") continue;
+    const envelope = parseSenderKeyEnvelope(item.meta.body || "");
+    if (!envelope?.skdm) continue;
+    await processRoomSenderDistribution(
+      envelope.groupId || item.meta.sessionKey,
+      envelope.sender || item.row.sender_username,
+      envelope.skdm,
+    );
+    if (item.meta.sessionKey && item.meta.sessionKey !== envelope.groupId) {
+      await processRoomSenderDistribution(
+        item.meta.sessionKey,
+        envelope.sender || item.row.sender_username,
+        envelope.skdm,
+      );
+    }
+  }
+
+  for (const item of deferred) {
+    if (item.meta.kind !== "room") continue;
     try {
-      const opened = await unwrapRoomSenderKeyPayload(
+      let opened = await unwrapRoomSenderKeyPayload(
         item.meta.sessionKey,
         item.row.sender_username,
         item.meta.body || "",
       );
+      if (!opened) {
+        const envelope = parseSenderKeyEnvelope(item.meta.body || "");
+        if (envelope?.skdm) {
+          await processRoomSenderDistribution(
+            envelope.groupId || item.meta.sessionKey,
+            envelope.sender || item.row.sender_username,
+            envelope.skdm,
+          );
+          opened = await unwrapRoomSenderKeyPayload(
+            item.meta.sessionKey,
+            item.row.sender_username,
+            item.meta.body || "",
+          );
+        }
+      }
       if (!opened) continue;
       const inner = parseMailboxPlain(opened);
       claimedMailboxIds.add(item.row.id);

@@ -99,6 +99,7 @@ export function ChatView() {
     active?.connectionState ?? "WAITING FOR PEER",
     ephemeralPeers,
     slug,
+    active && threadIsRoom(active) ? active.sessionKey : null,
   );
   const live = channel.connectionState;
   const connected = live === "CONNECTED";

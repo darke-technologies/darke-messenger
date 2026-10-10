@@ -54,6 +54,15 @@ function typingTopic(self: string, peer: string): string {
   return `signal-ephemeral:${pair.slice(0, 80)}`;
 }
 
+function roomTypingTopic(sessionKey: string): string {
+  const key = sessionKey.trim();
+  const hit = key.match(/0x[0-9a-fA-F]+/);
+  const id = (hit ? hit[0] : key).replace(/[^0-9a-zA-Z]/g, "").slice(0, 80);
+  return `room:${id}:typing`;
+}
+
+const ROOM_TYPING_KEY = "__room__";
+
 type TypingInner = {
   v: 2;
   kind: "typing";
@@ -97,6 +106,7 @@ export function usePeerChannel(
   peerState: PeerConnectionState,
   peerUsername?: string | string[] | null,
   selfUsername?: string | null,
+  roomSessionKey?: string | null,
 ): PeerChannel {
   const [connectionState, setConnectionState] =
     useState<PeerConnectionState>(peerState);
@@ -114,6 +124,7 @@ export function usePeerChannel(
   const self = toSlug(selfUsername ?? "");
   const peers = peerList(peerUsername, self);
   const peerKey = peers.join(",");
+  const roomTopic = roomSessionKey ? roomTypingTopic(roomSessionKey) : "";
   sessionRef.current = sessionKey;
   selfRef.current = selfUsername ?? null;
   peerRef.current = peers;
@@ -124,13 +135,43 @@ export function usePeerChannel(
   }, [peerState, sessionKey]);
 
   useEffect(() => {
-    if (!self || !peers.length) {
+    if (!self || (!roomTopic && !peers.length)) {
       realtimeRef.current = new Map();
       subscribedRef.current = false;
       return;
     }
     const channels = new Map<string, RealtimeChannel>();
     let live = 0;
+    if (roomTopic) {
+      const channel = supabase.channel(roomTopic, {
+        config: { broadcast: { ack: false, self: false } },
+      });
+      channel.on(
+        "broadcast",
+        { event: "typing" },
+        (msg: { payload?: { t?: unknown; s?: unknown; handle?: unknown } }) => {
+          const kind =
+            msg.payload?.t === TYPING_START || msg.payload?.t === TYPING_STOP
+              ? msg.payload.t
+              : null;
+          const handle = toSlug(
+            typeof msg.payload?.s === "string"
+              ? msg.payload.s
+              : typeof msg.payload?.handle === "string"
+                ? msg.payload.handle
+                : "",
+          );
+          if (!kind || !handle || handle === self) return;
+          const frame: TypingFrame = { type: kind, handle };
+          typingHandlers.current.forEach((handler) => handler(frame));
+        },
+      );
+      void channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") live += 1;
+        subscribedRef.current = live > 0;
+      });
+      channels.set(ROOM_TYPING_KEY, channel);
+    }
     for (const peer of peers) {
       const channel = supabase.channel(typingTopic(self, peer), {
         config: { broadcast: { ack: false, self: false } },
@@ -191,7 +232,7 @@ export function usePeerChannel(
         void supabase.removeChannel(channel);
       }
     };
-  }, [peerKey, self]);
+  }, [peerKey, roomTopic, self]);
 
   const transmit = useCallback(
     (payload: string) => {
@@ -231,11 +272,27 @@ export function usePeerChannel(
     const key = sessionRef.current?.trim() || "";
     const peers = peerRef.current;
     const channels = realtimeRef.current;
-    if (!peers.length || !channels.size) return;
+    const roomLive = channels.get(ROOM_TYPING_KEY);
+    if (!channels.size) return;
     void (async () => {
       if (!subscribedRef.current) {
         await new Promise((resolve) => window.setTimeout(resolve, 250));
       }
+      if (roomLive) {
+        await roomLive.send({
+          type: "broadcast",
+          event: "typing",
+          payload: {
+            v: 2,
+            kind: "typing",
+            t: kind,
+            s: toSlug(who),
+            handle: toSlug(who),
+          },
+        });
+        return;
+      }
+      if (!peers.length) return;
       for (const peer of peers) {
         const live = channels.get(peer);
         if (!live) continue;
