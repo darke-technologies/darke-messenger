@@ -180,7 +180,7 @@ export function ChatSidebar({
           {(
             [
               ["all", "ALL", 0],
-              ["messages", "1:1 CHATS", dmUnread],
+              ["messages", "DMs", dmUnread],
               ["rooms", "ROOMS", roomUnread],
             ] as const
           ).map(([id, label, unread]) => (
@@ -211,7 +211,7 @@ export function ChatSidebar({
               {lane === "rooms"
                 ? "No rooms yet."
                 : lane === "messages"
-                  ? "No 1:1 chats yet."
+                  ? "No DMs yet."
                   : "No conversations yet."}
             </p>
           ) : (

@@ -1,4 +1,6 @@
 import {
+  ensureRoomPairwiseSessions,
+  initializeX3DHSession,
   isSignalV2Ciphertext,
   recipientCanReceiveSignal,
   unwrapBytesPayload,
@@ -253,6 +255,10 @@ export async function queueRoomSenderKey(opts: {
   if (isReservedMailboxHandle(opts.recipient)) {
     return { ok: false, reason: "error" };
   }
+  const sessionOk = await initializeX3DHSession(opts.recipient).catch(
+    () => false,
+  );
+  if (!sessionOk) return { ok: false, reason: "pending-keys" };
   const packed = await wrapMailboxInner(
     opts.recipient,
     {
@@ -352,6 +358,7 @@ export async function queueRoomMessage(opts: {
     ),
   ].filter((handle) => handle && !isReservedMailboxHandle(handle));
   if (!people.length) return { ok: false, reason: "pending-keys" };
+  await ensureRoomPairwiseSessions(people);
   const inner = JSON.stringify({
     v: 2,
     sessionKey: opts.sessionKey,
@@ -367,19 +374,35 @@ export async function queueRoomMessage(opts: {
   let lastOk: MailboxEnqueue | null = null;
   let lastFail: MailboxEnqueue = { ok: false, reason: "pending-keys" };
   for (const recipient of people) {
+    const packed = await wrapMailboxInner(
+      recipient,
+      {
+        v: 2,
+        sessionKey: opts.sessionKey,
+        kind: "room",
+        body: sk,
+        messageId: opts.messageId,
+        title: opts.title?.trim() || undefined,
+      },
+      [text],
+    );
+    if (!packed.ok || !packed.envelope) {
+      lastFail = packed;
+      continue;
+    }
     inspectRelayInsert({
       kind: "room",
       sender: opts.sender,
       recipient,
-      wire: sk,
+      wire: packed.envelope,
       secrets: [text],
       innerSenderKey: sk,
-      pairwisePrekeysOk: true,
+      pairwisePrekeysOk: await recipientCanReceiveSignal(recipient),
     });
     const queued = await insertCiphertextOnly({
       sender: opts.sender,
       recipient,
-      ciphertext: sk,
+      ciphertext: packed.envelope,
       secrets: [text],
     });
     if (queued.ok) lastOk = queued;
@@ -556,7 +579,11 @@ async function loadAndPurgeMailbox(
         continue;
       }
       if (!isSignalV2Ciphertext(blob)) continue;
-      const opened = await unwrapTextPayload(row.sender_username, blob);
+      let opened = await unwrapTextPayload(row.sender_username, blob);
+      if (!opened) {
+        await initializeX3DHSession(row.sender_username).catch(() => false);
+        opened = await unwrapTextPayload(row.sender_username, blob);
+      }
       if (!opened) continue;
       const meta = parseMailboxPlain(opened);
       if (!meta) continue;
@@ -651,6 +678,7 @@ async function loadAndPurgeMailbox(
         item.meta.body || "",
       );
       if (!opened) {
+        await initializeX3DHSession(item.row.sender_username).catch(() => false);
         const envelope = parseSenderKeyEnvelope(item.meta.body || "");
         if (envelope?.skdm) {
           await processRoomSenderDistribution(
@@ -658,12 +686,12 @@ async function loadAndPurgeMailbox(
             envelope.sender || item.row.sender_username,
             envelope.skdm,
           );
-          opened = await unwrapRoomSenderKeyPayload(
-            item.meta.sessionKey,
-            item.row.sender_username,
-            item.meta.body || "",
-          );
         }
+        opened = await unwrapRoomSenderKeyPayload(
+          item.meta.sessionKey,
+          item.row.sender_username,
+          item.meta.body || "",
+        );
       }
       if (!opened) continue;
       const inner = parseMailboxPlain(opened);

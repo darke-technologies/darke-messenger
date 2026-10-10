@@ -41,7 +41,10 @@ import {
   type ThreadPinEvent,
   showCopyLinkToast,
 } from "./dmSessions";
-import { bootstrapSignalProtocol } from "./lib/crypto/signal";
+import {
+  bootstrapSignalProtocol,
+  ensureRoomPairwiseSessions,
+} from "./lib/crypto/signal";
 import { supabase } from "./supabase";
 import {
   fetchAndPurgeMailbox,
@@ -518,6 +521,12 @@ export function DmProvider({
 
   const shareRoomSenderKey = useCallback(
     async (thread: DmThread, recipients: string[], force = false) => {
+      const people = recipients
+        .map((row) => normalizeChatGuestHandle(row))
+        .filter((handle) => handle && handle !== slug);
+      if (people.length) {
+        await ensureRoomPairwiseSessions(people);
+      }
       const distribution = await createRoomSenderDistribution(
         thread.sessionKey,
         slug,

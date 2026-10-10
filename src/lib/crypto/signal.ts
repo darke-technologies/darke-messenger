@@ -823,6 +823,20 @@ export async function recipientCanReceiveSignal(
   return peekPublishedPreKeyBundle(username);
 }
 
+/** Publish our bundle, then open a SessionCipher to each room peer (SKDM transport only). */
+export async function ensureRoomPairwiseSessions(
+  peers: string[],
+): Promise<void> {
+  const ready = await ensureLocalSignalIdentity();
+  if (!ready) return;
+  await syncPublicSignalBundle();
+  for (const peer of peers) {
+    const slug = toSlug(peer);
+    if (!slug) continue;
+    await initializeX3DHSession(slug).catch(() => false);
+  }
+}
+
 export async function wrapTextPayload(
   peerUsername: string,
   plaintext: string,

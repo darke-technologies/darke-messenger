@@ -105,13 +105,12 @@ export function inspectRelayInsert(opts: {
     pairwisePrekeyOrSession: opts.pairwisePrekeysOk,
     decryptLocation: "not on server — client IndexedDB Signal store only",
     pass:
-      opts.kind === "room"
-        ? looksSenderKey(opts.wire) && leaks.length === 0 && innerSk
-        : looksSignalV2(opts.wire) &&
-          leaks.length === 0 &&
-          !skOnWire &&
-          !skdmOnWire &&
-          opts.pairwisePrekeysOk,
+      looksSignalV2(opts.wire) &&
+      leaks.length === 0 &&
+      !skOnWire &&
+      !skdmOnWire &&
+      opts.pairwisePrekeysOk &&
+      (opts.kind !== "room" || innerSk),
   };
   console.info(TAG, opts.kind === "skdm" ? "SKDM → relay" : "ROOM MSG → relay", report);
 }
