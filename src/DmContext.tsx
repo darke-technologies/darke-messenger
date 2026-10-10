@@ -49,6 +49,7 @@ import {
   queueMailboxControl,
   queueMailboxFile,
   queueMailboxMessage,
+  queueRoomClose,
   queueRoomJoinRequest,
   queueRoomMessage,
   queueRoomSenderKey,
@@ -91,6 +92,7 @@ import { syncChatIndex } from "./searchIndex";
 import {
   adoptLegacyThreadTitles,
   hydrateLocalChatTitles,
+  peekLocalChatTitle,
   setLocalChatTitle,
 } from "./localChatTitles";
 
@@ -311,7 +313,7 @@ export function DmProvider({
     };
   }, [slug, guest]);
 
-  useEffect(() => {
+  const acceptRoomInvite = useCallback(() => {
     if (guest) return;
     const invite = consumeRoomJoinIntent();
     if (!invite) return;
@@ -322,15 +324,28 @@ export function DmProvider({
     }
     setThreads((rows) => {
       const found =
-        rows.find((row) => row.sessionKey === key && threadIsRoom(row)) ??
-        rows.find((row) => row.sessionKey === key);
+        rows.find(
+          (row) =>
+            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key &&
+            threadIsRoom(row),
+        ) ??
+        rows.find(
+          (row) =>
+            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key,
+        );
       if (found) {
         const next = withRoomTitle(
           threadIsRoom(found)
             ? found
-            : { ...found, roomKind: "room" as const, isGroup: true, handle: "room" },
+            : {
+                ...found,
+                roomKind: "room" as const,
+                isGroup: true,
+                handle: "room",
+              },
           invite.name,
         );
+        if (invite.name) setLocalChatTitle(slug, found.id, invite.name);
         setActiveId(found.id);
         setDraft({
           sessionKey: key,
@@ -343,6 +358,7 @@ export function DmProvider({
         return rows.map((row) => (row.id === found.id ? next : row));
       }
       const thread = adoptRoomThread(slug, rows, key, host, invite.name);
+      if (invite.name) setLocalChatTitle(slug, thread.id, invite.name);
       setActiveId(thread.id);
       setDraft({
         sessionKey: key,
@@ -358,6 +374,19 @@ export function DmProvider({
       });
     }
   }, [guest, slug]);
+
+  useEffect(() => {
+    acceptRoomInvite();
+  }, [acceptRoomInvite]);
+
+  useEffect(() => {
+    if (guest) return;
+    function onHash() {
+      acceptRoomInvite();
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [acceptRoomInvite, guest]);
 
   const generateChatLink = useCallback(() => {
     setDraft(makeDraft());
@@ -488,7 +517,7 @@ export function DmProvider({
   );
 
   const shareRoomSenderKey = useCallback(
-    async (thread: DmThread, recipients: string[]) => {
+    async (thread: DmThread, recipients: string[], force = false) => {
       const distribution = await createRoomSenderDistribution(
         thread.sessionKey,
         slug,
@@ -496,9 +525,11 @@ export function DmProvider({
       if (!distribution) return;
       const members = roomRecipientHandles(thread, slug);
       const already = new Set(
-        (thread.skSharedWith ?? []).map((row) =>
-          normalizeChatGuestHandle(row),
-        ),
+        force
+          ? []
+          : (thread.skSharedWith ?? []).map((row) =>
+              normalizeChatGuestHandle(row),
+            ),
       );
       const sent: string[] = [];
       for (const raw of recipients) {
@@ -615,7 +646,7 @@ export function DmProvider({
         ? roomShareLink(
             row.sessionKey,
             row.createdBy || slug,
-            row.displayName,
+            peekLocalChatTitle(slug, row.id) || row.displayName,
           )
         : sessionShareLink(row.sessionKey)
       : draft?.shareLink;
@@ -1064,6 +1095,22 @@ export function DmProvider({
       for (const item of incoming) {
         const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
         const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
+        if (item.kind === "room-close") {
+          const closing = next.find(
+            (row) =>
+              (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key ||
+              row.id === key,
+          );
+          next = next.filter(
+            (row) =>
+              (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) !== key &&
+              row.id !== key,
+          );
+          if (closing && closing.id === activeId) {
+            setActiveId(next[0]?.id ?? null);
+          }
+          continue;
+        }
         if (item.kind === "room-join") {
           const found = next.find(
             (row) => threadIsRoom(row) && row.sessionKey === key,
@@ -1088,6 +1135,9 @@ export function DmProvider({
               row.id === key,
           );
           if (found) {
+            if (item.title?.trim()) {
+              setLocalChatTitle(slug, found.id, item.title.trim());
+            }
             next = next.map((row) =>
               row.id === found.id
                 ? addMembersToChat(
@@ -1160,6 +1210,7 @@ export function DmProvider({
             next = [found, ...next];
           } else if (item.title?.trim()) {
             found = withRoomTitle(found, item.title, item.topic);
+            setLocalChatTitle(slug, found.id, item.title.trim());
             next = next.map((row) => (row.id === found!.id ? found! : row));
           }
           if (
@@ -1499,7 +1550,16 @@ export function DmProvider({
     const next = name.trim();
     if (!next || !id) return;
     setLocalChatTitle(slug, id, next);
-  }, [slug]);
+    const current = threadsRef.current.find((row) => row.id === id);
+    if (!current || !threadIsRoom(current) || !isChatOwner(current, slug)) {
+      return;
+    }
+    const updated = withRoomTitle(current, next);
+    setThreads((rows) =>
+      rows.map((row) => (row.id === id ? { ...updated, skSharedWith: [] } : row)),
+    );
+    void shareRoomSenderKey({ ...updated, skSharedWith: [] }, roomRecipientHandles(updated, slug), true);
+  }, [shareRoomSenderKey, slug]);
 
   const renameActive = useCallback(
     (name: string) => {
@@ -1528,6 +1588,21 @@ export function DmProvider({
 
   const deleteThread = useCallback(
     (id: string) => {
+      const current = threadsRef.current.find((row) => row.id === id);
+      if (
+        current &&
+        threadIsRoom(current) &&
+        isChatOwner(current, slug) &&
+        !guest
+      ) {
+        for (const recipient of roomRecipientHandles(current, slug)) {
+          void queueRoomClose({
+            sender: slug,
+            recipient,
+            sessionKey: current.sessionKey,
+          });
+        }
+      }
       setThreads((rows) => {
         const next = rows.filter((row) => row.id !== id);
         if (activeId === id) {
@@ -1537,7 +1612,7 @@ export function DmProvider({
         return next;
       });
     },
-    [activeId, slug],
+    [activeId, guest, slug],
   );
 
   const rotateActiveKeys = useCallback(() => {

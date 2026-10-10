@@ -189,22 +189,28 @@ export function ChatHeader({
                 }
               }}
             />
-          ) : (
+          ) : canRename ? (
             <button
               type="button"
               className="chat-title-btn"
               onClick={() => {
-                if (!canRename) return;
                 setDraft(title);
                 setEditing(true);
               }}
-              title={canRename ? "Rename chat" : undefined}
+              title="Rename chat"
             >
               <h2>{title}</h2>
               {handleBadge ? (
                 <span className="chat-head-handle">{handleBadge}</span>
               ) : null}
             </button>
+          ) : (
+            <div className="chat-title-btn">
+              <h2>{title}</h2>
+              {handleBadge ? (
+                <span className="chat-head-handle">{handleBadge}</span>
+              ) : null}
+            </div>
           )}
           {subtitle ? <p className="chat-head-meta">{subtitle}</p> : null}
         </div>

@@ -20098,15 +20098,16 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
 .dm-nav-stream {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px 8px;
+  justify-content: center;
+  gap: 0;
+  padding: 4px 8px 10px;
 }
 
 .dm-nav-stream-btn {
   margin: 0;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: #a1a1aa;
   font-size: 11px;
@@ -20115,12 +20116,13 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   cursor: pointer;
   transform: none !important;
   outline: none !important;
+  border-bottom: 2px solid transparent;
 }
 
 .dm-nav-stream-btn.is-on {
   background: #fff;
   color: #09090b;
-  border-color: transparent;
+  border-bottom-color: #fff;
 }
 
 .dm-nav-stream-btn:hover:not(.is-on) {

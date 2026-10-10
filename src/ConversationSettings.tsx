@@ -77,7 +77,7 @@ export function ConversationSettings({
     ? roomShareLink(
         thread.sessionKey,
         thread.createdBy || slug,
-        thread.displayName,
+        local.titleFor(thread) || thread.displayName,
       )
     : sessionShareLink(thread.sessionKey);
   const searchHits = useMemo(() => {

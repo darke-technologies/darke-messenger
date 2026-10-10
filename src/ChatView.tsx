@@ -10,6 +10,7 @@ import {
   chatDayKey,
   chatMemberCount,
   chatOwnerHandle,
+  isChatOwner,
   formatSlackDayLabel,
   isFounderThread,
   isNodeGreeting,
@@ -497,7 +498,10 @@ export function ChatView() {
         tab={viewTab}
         onTab={setTab}
         onRename={renameActive}
-        canRename={Boolean(active)}
+        canRename={
+          Boolean(active) &&
+          (!threadIsGroup(active) || isChatOwner(active, slug))
+        }
         memberCount={chatMemberCount(active, slug)}
         handleBadge={undefined}
         isGroup={isGroup || isRoom}
@@ -801,7 +805,7 @@ export function ChatView() {
               ? roomShareLink(
                   active.sessionKey,
                   active.createdBy || slug,
-                  active.displayName,
+                  title || active.displayName,
                 )
               : sessionShareLink(active.sessionKey)
           }

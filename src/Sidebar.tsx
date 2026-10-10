@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDm } from "./DmContext";
 import { threadIsGroup, threadIsRoom } from "./chatController";
-import { listChatMemberHandles, threadLastActivityAt } from "./chatService";
+import {
+  isChatOwner,
+  listChatMemberHandles,
+  threadLastActivityAt,
+} from "./chatService";
 import { useLocalChat } from "./useLocalChat";
 import {
   sidebarAvatarNames,
@@ -215,6 +219,7 @@ export function ChatSidebar({
             <IconPin className="chat-nav-menu-icon" />
             {menuThread.pinned ? "Unpin" : "Pin"}
           </button>
+          {!threadIsRoom(menuThread) || isChatOwner(menuThread, slug) ? (
           <button
             type="button"
             onClick={() => {
@@ -225,6 +230,7 @@ export function ChatSidebar({
             <span aria-hidden>✎</span>
             Rename
           </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {

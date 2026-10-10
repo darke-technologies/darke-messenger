@@ -27,7 +27,11 @@ import {
 } from "./authCallback";
 import { resetWelcomePrefsCache, hydrateThemeFromVault } from "./welcomePrefs";
 import { initTheme } from "./theme";
-import { captureJoinIntent, captureRoomJoinIntent } from "./dmSessions";
+import {
+  captureJoinIntent,
+  captureRoomJoinIntent,
+  parseRoomInvite,
+} from "./dmSessions";
 import { GuestMessenger } from "./GuestMessenger";
 import { UpgradeModal } from "./UpgradeModal";
 import { OPEN_PRICING_EVENT } from "./useUpgradeModalStore";
@@ -153,7 +157,11 @@ function AppBody({ initialPath }: { initialPath: string }) {
     captureJoinIntent();
     resetSessionCaches();
     void hydrateThemeFromVault().catch(() => null);
-    go("/app", { kind: "app", slug });
+    const hash =
+      typeof window !== "undefined" && parseRoomInvite(window.location.href)
+        ? window.location.hash
+        : "";
+    go(`/app${hash}`, { kind: "app", slug });
   }
 
   useEffect(() => {

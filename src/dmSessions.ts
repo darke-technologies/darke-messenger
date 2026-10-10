@@ -256,17 +256,27 @@ export function roomShareLink(
 export function parseRoomInvite(raw = ""): RoomInvite | null {
   if (!raw) return null;
   try {
-    const url = raw.includes("://")
-      ? new URL(raw)
-      : typeof window !== "undefined"
-        ? new URL(raw, window.location.origin)
-        : null;
-    const blob = url
-      ? `${url.hash.replace(/^#/, "")}&${url.search.replace(/^\?/, "")}`
-      : raw.replace(/^#/, "");
+    const text = raw.trim();
+    let blob = text.replace(/^#/, "");
+    if (
+      text.includes("://") ||
+      text.startsWith("/") ||
+      text.startsWith("?")
+    ) {
+      const url = new URL(
+        text,
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://darke.local",
+      );
+      blob = `${url.hash.replace(/^#/, "")}&${url.search.replace(/^\?/, "")}`;
+    }
     const params = new URLSearchParams(blob.replace(/#/g, "&"));
     const room = params.get("darke-room") || params.get("room");
-    const host = (params.get("host") || "").replace(/^@/, "").trim().toLowerCase();
+    const host = (params.get("host") || "")
+      .replace(/^@/, "")
+      .trim()
+      .toLowerCase();
     const sessionKey = normalizeSessionKey(room ?? "");
     if (!sessionKey || !host) return null;
     const name = clipRoomInviteName(
