@@ -89,6 +89,7 @@ export function adoptRoomThread(
 function normHandle(raw: string, self?: string): string {
   const handle = raw.replace(/^@/, "").trim().toLowerCase();
   if (!handle || handle === "__self__") return "";
+  if (handle === "room" || handle === "guest" || handle === "peer") return "";
   if (self && handle === self.replace(/^@/, "").trim().toLowerCase()) return "";
   return handle;
 }
@@ -149,12 +150,17 @@ export function addMembersToChat(
   }
   const rows = guests;
   const first = rows[0]?.handle;
+  const keepRoomHandle = threadIsRoom(thread);
   return {
     ...thread,
     isGroup: threadIsGroup(thread),
     chatGuests: rows,
     invitedHandles: rows.map((guest) => guest.handle),
     peerUsername: thread.peerUsername || first,
-    handle: thread.peerUsername ? thread.handle : first || thread.handle,
+    handle: keepRoomHandle
+      ? thread.handle || "room"
+      : thread.peerUsername
+        ? thread.handle
+        : first || thread.handle,
   };
 }

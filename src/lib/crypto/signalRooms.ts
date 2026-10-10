@@ -136,8 +136,20 @@ export async function unwrapRoomSenderKeyPayload(
   try {
     const parsed = JSON.parse(payload) as SenderKeyEnvelope;
     const store = await getSignalStore();
-    const cipher = new GroupCipher(store, senderKeyName(groupId, who));
-    const plain = await cipher.decrypt(b64ToBytes(parsed.body));
+    const from = parsed.sender ? toSlug(parsed.sender) : who;
+    const packed = b64ToBytes(parsed.body);
+    const ids = [...new Set([groupId, parsed.groupId].filter(Boolean))];
+    let plain: Uint8Array | null = null;
+    for (const gid of ids) {
+      try {
+        const cipher = new GroupCipher(store, senderKeyName(gid, from));
+        plain = await cipher.decrypt(packed);
+        if (plain) break;
+      } catch {
+        plain = null;
+      }
+    }
+    if (!plain) throw new Error("sender-key-decrypt");
     const text = new TextDecoder().decode(plain);
     inspectClientDecrypt({
       stage: "sender-key",

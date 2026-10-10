@@ -55,6 +55,7 @@ import {
 } from "./mailbox";
 import {
   createRoomSenderDistribution,
+  isSignalSenderKeyCiphertext,
   processRoomSenderDistribution,
   unwrapRoomSenderKeyPayload,
 } from "./lib/crypto/signalRooms";
@@ -77,6 +78,7 @@ import {
   isChatOwner,
   listChatMemberHandles,
   normalizeChatGuestHandle,
+  roomRecipientHandles,
   sidebarPeerHandle,
   standaloneJoinBlocked,
 } from "./chatService";
@@ -477,7 +479,7 @@ export function DmProvider({
         slug,
       );
       if (!distribution) return;
-      const members = listChatMemberHandles(thread, slug);
+      const members = roomRecipientHandles(thread, slug);
       const already = new Set(
         (thread.skSharedWith ?? []).map((row) =>
           normalizeChatGuestHandle(row),
@@ -677,11 +679,9 @@ export function DmProvider({
       if (!opts?.mailbox || guest) return;
       sendingIdsRef.current.add(localId);
       if (thread && threadIsRoom(thread)) {
-        const members = listChatMemberHandles(thread, slug).filter(
-          (handle) => handle !== slug,
-        );
+        const members = roomRecipientHandles(thread, slug);
         await shareRoomSenderKey(thread, members);
-        let ok = members.length === 0;
+        let ok = false;
         for (const recipient of members) {
           const queued = await queueRoomMessage({
             sender: slug,
@@ -1101,8 +1101,8 @@ export function DmProvider({
           continue;
         }
         if (item.kind === "room") {
-          const plain = roomPlain.get(item.id);
-          if (!plain) continue;
+          const plain = roomPlain.get(item.id) ?? item.body;
+          if (!plain || isSignalSenderKeyCiphertext(plain)) continue;
           let innerBody = plain;
           let innerId = item.messageId;
           try {
@@ -1301,12 +1301,66 @@ export function DmProvider({
     const inflight = new Set<string>();
     async function flush() {
       for (const thread of threadsRef.current) {
+        if (threadIsRoom(thread)) {
+          const recipients = roomRecipientHandles(thread, slug);
+          if (!recipients.length) continue;
+          await shareRoomSenderKey(thread, recipients);
+          for (const msg of thread.messages) {
+            if (cancelled) return;
+            if (msg.direction !== "sent" || msg.relay !== "pending-keys") continue;
+            if (sendingIdsRef.current.has(msg.id)) continue;
+            if (Date.now() - msg.at < 4000) continue;
+            if (inflight.has(msg.id)) continue;
+            inflight.add(msg.id);
+            try {
+              let ok = false;
+              let queuedId: string | undefined;
+              for (const recipient of recipients) {
+                const queued = await queueRoomMessage({
+                  sender: slug,
+                  recipient,
+                  sessionKey: thread.sessionKey,
+                  body: msg.body,
+                  messageId: msg.id,
+                });
+                if (queued.ok) {
+                  ok = true;
+                  queuedId = queued.id;
+                }
+              }
+              if (cancelled || !ok) {
+                inflight.delete(msg.id);
+                continue;
+              }
+              setThreads((rows) =>
+                rows.map((row) =>
+                  row.id === thread.id
+                    ? {
+                        ...row,
+                        messages: row.messages.map((item) =>
+                          item.id === msg.id
+                            ? {
+                                ...item,
+                                pendingId: queuedId,
+                                relay: "mailbox" as const,
+                              }
+                            : item,
+                        ),
+                      }
+                    : row,
+                ),
+              );
+            } catch {
+              inflight.delete(msg.id);
+            }
+          }
+          continue;
+        }
         const recipient =
           sidebarPeerHandle(thread, slug) ||
           thread.peerUsername ||
           peerUsernameFromHandle(thread.handle ?? "");
         if (!recipient) continue;
-        if (threadIsRoom(thread)) continue;
         for (const msg of thread.messages) {
           if (cancelled) return;
           if (msg.direction !== "sent" || msg.relay !== "pending-keys") continue;
@@ -1369,7 +1423,7 @@ export function DmProvider({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [guest, slug, hasPendingKeys]);
+  }, [guest, slug, hasPendingKeys, shareRoomSenderKey]);
 
   useEffect(() => {
     if (guest || !hasMailboxQueue) return;

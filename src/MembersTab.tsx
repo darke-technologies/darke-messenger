@@ -4,6 +4,7 @@ import {
   listChatGuests,
   nodeFingerprint,
   normalizeChatGuestHandle,
+  roomRecipientHandles,
 } from "./chatService";
 import type { DmThread } from "./dmSessions";
 import type { PeerConnectionState } from "./dmSessions";
@@ -50,11 +51,16 @@ export function MembersTab({
       ? active.peerUsername
       : null;
   const handles = useMemo(() => {
+    if (active?.roomKind === "room") {
+      return [
+        ...new Set([slug, ...roomRecipientHandles(active, slug)].filter(Boolean)),
+      ];
+    }
     const rows = [slug];
     if (peer) rows.push(peer);
     rows.push(...invited);
     return rows;
-  }, [slug, peer, invited]);
+  }, [slug, peer, invited, active]);
 
   const people = usePersonDirectory(handles);
 

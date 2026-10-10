@@ -174,6 +174,7 @@ function isKeyPair(value: unknown): value is KeyPairType {
 class DarkeSignalStore implements StorageType, SenderKeyStore {
   private data: StoreDump = {};
   private persistTimer: number | null = null;
+  private senderKeys = new Map<string, SenderKeyRecord>();
 
   async hydrate(): Promise<void> {
     const raw = await idbGet("dump");
@@ -343,16 +344,25 @@ class DarkeSignalStore implements StorageType, SenderKeyStore {
     senderKeyName: SenderKeyName,
     record: SenderKeyRecord,
   ): Promise<void> {
+    const id = senderKeyName.toString();
+    this.senderKeys.set(id, record);
     const encoded = SenderKeyRecord.encode(record).finish();
-    this.put(`senderKey:${senderKeyName.toString()}`, bytesToB64(encoded));
+    this.put(`senderKey:${id}`, bytesToB64(encoded));
     await this.persistNow();
   }
 
   async loadSenderKey(senderKeyName: SenderKeyName): Promise<SenderKeyRecord> {
-    const raw = this.get(`senderKey:${senderKeyName.toString()}`);
+    const id = senderKeyName.toString();
+    const live = this.senderKeys.get(id);
+    if (live && typeof live.isEmpty === "function" && !live.isEmpty()) {
+      return live;
+    }
+    const raw = this.get(`senderKey:${id}`);
     if (typeof raw !== "string" || !raw) return new SenderKeyRecord();
     try {
-      return SenderKeyRecord.decode(b64ToBytes(raw));
+      const decoded = SenderKeyRecord.decode(b64ToBytes(raw));
+      this.senderKeys.set(id, decoded);
+      return decoded;
     } catch {
       return new SenderKeyRecord();
     }

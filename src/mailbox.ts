@@ -8,6 +8,8 @@ import {
 } from "./lib/crypto/signal";
 import {
   isSignalSenderKeyCiphertext,
+  processRoomSenderDistribution,
+  unwrapRoomSenderKeyPayload,
   wrapRoomSenderKeyPayload,
 } from "./lib/crypto/signalRooms";
 import {
@@ -223,6 +225,11 @@ export async function queueMailboxControl(opts: {
   });
 }
 
+function isReservedMailboxHandle(raw: string): boolean {
+  const handle = toSlug(raw);
+  return !handle || handle === "room" || handle === "guest" || handle === "peer";
+}
+
 export async function queueRoomSenderKey(opts: {
   sender: string;
   recipient: string;
@@ -232,6 +239,9 @@ export async function queueRoomSenderKey(opts: {
   topic?: string;
   members?: string[];
 }): Promise<MailboxEnqueue> {
+  if (isReservedMailboxHandle(opts.recipient)) {
+    return { ok: false, reason: "error" };
+  }
   const packed = await wrapMailboxInner(
     opts.recipient,
     {
@@ -293,6 +303,9 @@ export async function queueRoomMessage(opts: {
   body: string;
   messageId?: string;
 }): Promise<MailboxEnqueue> {
+  if (isReservedMailboxHandle(opts.recipient)) {
+    return { ok: false, reason: "error" };
+  }
   const text = opts.body.trim();
   if (!text) return { ok: false, reason: "error" };
   const inner = JSON.stringify({
@@ -454,6 +467,35 @@ async function loadAndPurgeMailbox(
     .order("created_at", { ascending: true });
   if (error || !Array.isArray(data)) return [];
   const out: FetchedMailbox[] = [];
+  const deferred: { row: MailboxRow; meta: MailboxPlain }[] = [];
+
+  function toFetched(
+    row: MailboxRow,
+    meta: MailboxPlain,
+    extra?: { body?: string; fileUrl?: string; fileSize?: number },
+  ): FetchedMailbox {
+    return {
+      id: row.id,
+      sender: row.sender_username,
+      sessionKey: meta.sessionKey,
+      kind: meta.kind,
+      body:
+        extra?.body ??
+        (meta.kind === "file" ? meta.fileName || "Encrypted file" : meta.body || ""),
+      fileName: meta.fileName,
+      fileUrl: extra?.fileUrl,
+      fileSize: extra?.fileSize,
+      at: Date.parse(row.created_at) || Date.now(),
+      messageId: meta.messageId,
+      pinned: meta.pinned,
+      pinUntil: meta.pinUntil,
+      pinAt: meta.pinAt,
+      title: meta.title,
+      topic: meta.topic,
+      members: meta.members,
+    };
+  }
+
   for (const raw of data) {
     const row = raw as MailboxRow;
     try {
@@ -471,6 +513,8 @@ async function loadAndPurgeMailbox(
           ok: true,
           kind: meta.kind,
         });
+        deferred.push({ row, meta });
+        continue;
       }
       let fileUrl: string | undefined;
       let fileSize: number | undefined;
@@ -492,30 +536,50 @@ async function loadAndPurgeMailbox(
         fileSize = file.size;
       }
       claimedMailboxIds.add(row.id);
-      out.push({
-        id: row.id,
-        sender: row.sender_username,
-        sessionKey: meta.sessionKey,
-        kind: meta.kind,
-        body:
-          meta.kind === "file"
-            ? meta.fileName || "Encrypted file"
-            : meta.body || "",
-        fileName: meta.fileName,
-        fileUrl,
-        fileSize,
-        at: Date.parse(row.created_at) || Date.now(),
-        messageId: meta.messageId,
-        pinned: meta.pinned,
-        pinUntil: meta.pinUntil,
-        pinAt: meta.pinAt,
-        title: meta.title,
-        topic: meta.topic,
-        members: meta.members,
-      });
+      out.push(toFetched(row, meta, { fileUrl, fileSize }));
       await purgeRow(row);
     } catch {
       /* leave opaque ciphertext until this device can decrypt */
+    }
+  }
+
+  for (const item of deferred) {
+    if (item.meta.kind !== "skdm") continue;
+    try {
+      const ok = await processRoomSenderDistribution(
+        item.meta.sessionKey,
+        item.row.sender_username,
+        item.meta.body || "",
+      );
+      inspectClientDecrypt({
+        stage: "sender-key",
+        sender: item.row.sender_username,
+        ok,
+        kind: "skdm",
+      });
+      if (!ok) continue;
+      claimedMailboxIds.add(item.row.id);
+      out.push(toFetched(item.row, item.meta));
+      await purgeRow(item.row);
+    } catch {
+      /* keep SKDM until this device can process it */
+    }
+  }
+
+  for (const item of deferred) {
+    if (item.meta.kind !== "room") continue;
+    try {
+      const opened = await unwrapRoomSenderKeyPayload(
+        item.meta.sessionKey,
+        item.row.sender_username,
+        item.meta.body || "",
+      );
+      if (!opened) continue;
+      claimedMailboxIds.add(item.row.id);
+      out.push(toFetched(item.row, item.meta, { body: opened }));
+      await purgeRow(item.row);
+    } catch {
+      /* keep room ciphertext until Sender Key decrypts */
     }
   }
   return out;

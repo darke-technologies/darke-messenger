@@ -87,6 +87,39 @@ export function listChatMemberHandles(
   return [...people];
 }
 
+const ROOM_RESERVED_HANDLES = new Set([
+  "",
+  "room",
+  "guest",
+  "peer",
+  "__self__",
+]);
+
+export function roomRecipientHandles(
+  thread: Pick<
+    DmThread,
+    | "chatGuests"
+    | "invitedHandles"
+    | "peerUsername"
+    | "handle"
+    | "createdBy"
+  > | null,
+  selfSlug: string,
+): string[] {
+  const self = normalizeChatGuestHandle(selfSlug);
+  const out = new Set<string>();
+  for (const handle of listChatMemberHandles(thread, selfSlug)) {
+    if (handle && handle !== self && !ROOM_RESERVED_HANDLES.has(handle)) {
+      out.add(handle);
+    }
+  }
+  const owner = normalizeChatGuestHandle(thread?.createdBy ?? "");
+  if (owner && owner !== self && !ROOM_RESERVED_HANDLES.has(owner)) {
+    out.add(owner);
+  }
+  return [...out];
+}
+
 export function chatMemberCount(
   thread: Pick<
     DmThread,

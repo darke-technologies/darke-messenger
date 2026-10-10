@@ -638,6 +638,7 @@ export function formatBubbleTime(at: number): string {
 export function peerUsernameFromHandle(handle: string): string | null {
   const raw = handle.replace(/^@/, "").trim().toLowerCase();
   if (!raw || raw.startsWith("0x") || raw.length < 2) return null;
+  if (raw === "room" || raw === "guest" || raw === "peer") return null;
   return raw;
 }
 
