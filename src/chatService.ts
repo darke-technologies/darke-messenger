@@ -64,10 +64,18 @@ export const STANDALONE_GROUP_LIMIT_NOTE =
 export const GROUP_CHAT_JOIN_BLOCKED =
   "This node has reached its participant limit.";
 
+const ROOM_RESERVED_HANDLES = new Set([
+  "",
+  "room",
+  "guest",
+  "peer",
+  "__self__",
+]);
+
 export function listChatMemberHandles(
   thread: Pick<
     DmThread,
-    "chatGuests" | "invitedHandles" | "peerUsername" | "handle"
+    "chatGuests" | "invitedHandles" | "peerUsername" | "handle" | "createdBy"
   > | null,
   selfSlug: string,
 ): string[] {
@@ -78,22 +86,24 @@ export function listChatMemberHandles(
   if (!thread) return [...people];
   const peer = normalizeChatGuestHandle(thread.peerUsername || "");
   if (peer && peer !== self) people.add(peer);
+  const owner = normalizeChatGuestHandle(thread.createdBy || "");
+  if (owner && owner !== self && !ROOM_RESERVED_HANDLES.has(owner)) {
+    people.add(owner);
+  }
   const fromHandle = peerUsernameFromHandle(thread.handle || "");
-  if (fromHandle && fromHandle !== self) people.add(fromHandle);
+  if (
+    fromHandle &&
+    fromHandle !== self &&
+    !ROOM_RESERVED_HANDLES.has(fromHandle)
+  ) {
+    people.add(fromHandle);
+  }
   for (const guest of listChatGuests(thread)) {
     const handle = normalizeChatGuestHandle(guest.handle);
     if (handle && handle !== self) people.add(handle);
   }
   return [...people];
 }
-
-const ROOM_RESERVED_HANDLES = new Set([
-  "",
-  "room",
-  "guest",
-  "peer",
-  "__self__",
-]);
 
 export function roomRecipientHandles(
   thread: Pick<

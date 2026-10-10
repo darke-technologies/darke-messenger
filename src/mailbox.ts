@@ -125,7 +125,10 @@ async function insertCiphertextOnly(opts: {
   secrets: string[];
   filePath?: string | null;
 }): Promise<MailboxEnqueue> {
-  if (!isSignalV2Ciphertext(opts.ciphertext)) {
+  if (
+    !isSignalV2Ciphertext(opts.ciphertext) &&
+    !isSignalSenderKeyCiphertext(opts.ciphertext)
+  ) {
     return { ok: false, reason: "pending-keys" };
   }
   for (const secret of opts.secrets) {
@@ -331,56 +334,57 @@ export async function queueRoomJoinRequest(opts: {
 
 export async function queueRoomMessage(opts: {
   sender: string;
-  recipient: string;
+  recipient?: string;
+  recipients?: string[];
   sessionKey: string;
   body: string;
   messageId?: string;
   title?: string;
 }): Promise<MailboxEnqueue> {
-  if (isReservedMailboxHandle(opts.recipient)) {
-    return { ok: false, reason: "error" };
-  }
   const text = opts.body.trim();
   if (!text) return { ok: false, reason: "error" };
+  const people = [
+    ...new Set(
+      (opts.recipients ?? (opts.recipient ? [opts.recipient] : [])).map((row) =>
+        toSlug(row),
+      ),
+    ),
+  ].filter((handle) => handle && !isReservedMailboxHandle(handle));
+  if (!people.length) return { ok: false, reason: "pending-keys" };
   const inner = JSON.stringify({
     v: 2,
     sessionKey: opts.sessionKey,
     kind: "text",
     body: text,
     messageId: opts.messageId,
+    title: opts.title?.trim() || undefined,
   });
   const sk = await wrapRoomSenderKeyPayload(opts.sessionKey, opts.sender, inner);
   if (!sk || !isSignalSenderKeyCiphertext(sk)) {
     return { ok: false, reason: "pending-keys" };
   }
-  const packed = await wrapMailboxInner(
-    opts.recipient,
-    {
-      v: 2,
-      sessionKey: opts.sessionKey,
+  let lastOk: MailboxEnqueue | null = null;
+  let lastFail: MailboxEnqueue = { ok: false, reason: "pending-keys" };
+  for (const recipient of people) {
+    inspectRelayInsert({
       kind: "room",
-      body: sk,
-      messageId: opts.messageId,
-      title: opts.title?.trim() || undefined,
-    },
-    [text],
-  );
-  if (!packed.ok || !packed.envelope) return packed;
-  inspectRelayInsert({
-    kind: "room",
-    sender: opts.sender,
-    recipient: opts.recipient,
-    wire: packed.envelope,
-    secrets: [text],
-    innerSenderKey: sk,
-    pairwisePrekeysOk: await recipientCanReceiveSignal(opts.recipient),
-  });
-  return insertCiphertextOnly({
-    sender: opts.sender,
-    recipient: opts.recipient,
-    ciphertext: packed.envelope,
-    secrets: [text],
-  });
+      sender: opts.sender,
+      recipient,
+      wire: sk,
+      secrets: [text],
+      innerSenderKey: sk,
+      pairwisePrekeysOk: true,
+    });
+    const queued = await insertCiphertextOnly({
+      sender: opts.sender,
+      recipient,
+      ciphertext: sk,
+      secrets: [text],
+    });
+    if (queued.ok) lastOk = queued;
+    else lastFail = queued;
+  }
+  return lastOk ?? lastFail;
 }
 
 export async function queueMailboxFile(opts: {
@@ -536,12 +540,37 @@ async function loadAndPurgeMailbox(
     try {
       if (claimedMailboxIds.has(row.id)) continue;
       const blob = row.encrypted_content ?? "";
+      if (isSignalSenderKeyCiphertext(blob)) {
+        let sessionKey = "";
+        try {
+          const parsed = JSON.parse(blob) as { groupId?: string };
+          sessionKey =
+            typeof parsed.groupId === "string" ? parsed.groupId : "";
+        } catch {
+          sessionKey = "";
+        }
+        if (!sessionKey) continue;
+        deferred.push({
+          row,
+          meta: {
+            v: 2,
+            sessionKey,
+            kind: "room",
+            body: blob,
+          },
+        });
+        continue;
+      }
       if (!isSignalV2Ciphertext(blob)) continue;
       const opened = await unwrapTextPayload(row.sender_username, blob);
       if (!opened) continue;
       const meta = parseMailboxPlain(opened);
       if (!meta) continue;
-      if (meta.kind === "skdm" || meta.kind === "room") {
+      if (
+        meta.kind === "skdm" ||
+        (meta.kind === "room" &&
+          isSignalSenderKeyCiphertext(meta.body || ""))
+      ) {
         inspectClientDecrypt({
           stage: "pairwise-mailbox",
           sender: row.sender_username,
@@ -610,8 +639,20 @@ async function loadAndPurgeMailbox(
         item.meta.body || "",
       );
       if (!opened) continue;
+      const inner = parseMailboxPlain(opened);
       claimedMailboxIds.add(item.row.id);
-      out.push(toFetched(item.row, item.meta, { body: opened }));
+      out.push(
+        toFetched(
+          item.row,
+          {
+            ...item.meta,
+            sessionKey: inner?.sessionKey || item.meta.sessionKey,
+            messageId: inner?.messageId || item.meta.messageId,
+            title: inner?.title || item.meta.title,
+          },
+          { body: opened },
+        ),
+      );
       await purgeRow(item.row);
     } catch {
       /* keep room ciphertext until Sender Key decrypts */

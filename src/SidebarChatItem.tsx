@@ -1,4 +1,4 @@
-import { IconGroupMesh, IconPin } from "./icons";
+import { IconPin } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 export function SidebarChatItem({
@@ -12,6 +12,7 @@ export function SidebarChatItem({
   badge,
   unread,
   handle,
+  at,
   menuOpen,
   onOpen,
   onMenu,
@@ -27,12 +28,14 @@ export function SidebarChatItem({
   badge: string | null;
   unread: number;
   handle?: string;
+  at?: string;
   menuOpen: boolean;
   onOpen: () => void;
   onMenu: (x: number, y: number) => void;
   onDragStart: () => string;
 }) {
   const peer = (avatars ?? []).filter(Boolean)[0] ?? "";
+  const faceName = group ? label : peer || label;
   return (
     <div
       className={`dm-nav-row${active ? " is-on" : ""}${menuOpen ? " is-menu" : ""}${unread ? " is-unread" : ""}`}
@@ -47,38 +50,30 @@ export function SidebarChatItem({
       }}
     >
       <button type="button" className="dm-nav-row-main" onClick={onOpen}>
-        {group ? (
-          <span className="dm-nav-avatar is-group-mesh" aria-hidden>
-            <IconGroupMesh className="dm-nav-group-mesh" />
-          </span>
-        ) : peer ? (
-          <UserAvatar
-            username={peer}
-            url={peerAvatarUrl ?? null}
-            className="dm-nav-avatar"
-            initialsLength={1}
-          />
-        ) : (
-          <UserAvatar
-            username={label}
-            url={peerAvatarUrl ?? null}
-            className="dm-nav-avatar"
-            initialsLength={1}
-          />
-        )}
+        <UserAvatar
+          username={faceName}
+          url={group ? null : peerAvatarUrl ?? null}
+          className="dm-nav-avatar"
+          initialsLength={1}
+        />
         <span className="dm-nav-who">
-          <strong>
-            {pinned ? <IconPin className="dm-nav-pin" /> : null}
-            <span className="dm-nav-title-text">{label}</span>
-            {badge ? <span className="dm-nav-badge">{badge}</span> : null}
+          <span className="dm-nav-who-top">
+            <strong>
+              {pinned ? <IconPin className="dm-nav-pin" /> : null}
+              <span className="dm-nav-title-text">{label}</span>
+              {badge ? <span className="dm-nav-badge">{badge}</span> : null}
+            </strong>
+            {at ? <span className="dm-nav-time">{at}</span> : null}
+          </span>
+          {handle ? <span className="dm-nav-handle">{handle}</span> : null}
+          <span className="dm-nav-who-bottom">
+            {preview ? <span className="dm-nav-preview">{preview}</span> : null}
             {unread > 0 ? (
               <span className="dm-nav-unread" aria-label={`${unread} unread`}>
                 {unread}
               </span>
             ) : null}
-          </strong>
-          {handle ? <span className="dm-nav-handle">{handle}</span> : null}
-          {preview ? <span className="dm-nav-preview">{preview}</span> : null}
+          </span>
         </span>
       </button>
       <button

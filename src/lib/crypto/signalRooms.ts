@@ -1,9 +1,11 @@
 import {
   crypto as signalCrypto,
+  GroupCipher,
   GroupSessionBuilder,
   SenderKeyDistributionMessage,
   SenderKeyMessage,
   SenderKeyName,
+  type SenderKeyStore,
 } from "@wppconnect/libsignal-protocol";
 import { toSlug } from "../../slug";
 import {
@@ -34,18 +36,28 @@ type SenderKeyStateLike = {
     getNext: () => SenderKeyStateLike["senderChainKey"];
   };
   signingKey: { public?: Uint8Array; private?: Uint8Array };
-  hasSenderMessageKey: (iteration: number) => boolean;
-  addSenderMessageKey: (key: unknown) => void;
-  removeSenderMessageKey: (iteration: number) =>
-    | {
-        iteration: number;
-        cipherKey: Uint8Array;
-        iv: Uint8Array;
-      }
-    | undefined;
+};
+
+type GroupCipherInternals = {
+  senderKeyStore: SenderKeyStore;
+  senderKeyId: SenderKeyName;
+  getSenderKey: (
+    state: SenderKeyStateLike,
+    iteration: number,
+  ) => {
+    iteration: number;
+    cipherKey: Uint8Array;
+    iv: Uint8Array;
+  };
 };
 
 const skLocks = new Map<string, Promise<unknown>>();
+const roomSessions = new Map<
+  string,
+  { cipher: GroupCipher; builder: GroupSessionBuilder }
+>();
+
+let groupCipherPatched = false;
 
 function withSkLock<T>(id: string, job: () => Promise<T>): Promise<T> {
   const prior = skLocks.get(id) ?? Promise.resolve();
@@ -75,6 +87,10 @@ function b64ToBytes(value: string): Uint8Array {
   return out;
 }
 
+function packedBytes(value: Uint8Array | ArrayBuffer): Uint8Array {
+  return value instanceof Uint8Array ? value : new Uint8Array(value);
+}
+
 function canonGroupId(raw: string): string {
   const hit = raw.match(/0x[0-9a-fA-F]{16,64}/);
   return hit ? `0x${hit[0].slice(2).toUpperCase()}` : raw;
@@ -84,33 +100,85 @@ function senderKeyName(groupId: string, sender: string): SenderKeyName {
   return new SenderKeyName(canonGroupId(groupId), signalAddress(sender));
 }
 
-function messageKeyFor(
-  state: SenderKeyStateLike,
-  iteration: number,
-): {
-  iteration: number;
-  cipherKey: Uint8Array;
-  iv: Uint8Array;
-} {
-  let chain = state.senderChainKey;
-  if (chain.iteration > iteration) {
-    const cached = state.removeSenderMessageKey(iteration);
-    if (!cached) {
-      throw new Error(
-        `Received message with old counter: ${chain.iteration}, ${iteration}`,
-      );
+/**
+ * Upstream GroupCipher.encrypt skips chain iteration 1 (`iteration === 0 ? 0 : iteration + 1`)
+ * and GroupCipher.decrypt ignores SenderKeyMessage.iteration. Patch both so the
+ * sender-key ratchet stays aligned with GroupSessionBuilder SKDMs.
+ */
+function patchGroupCipherRatchet(): void {
+  if (groupCipherPatched) return;
+  groupCipherPatched = true;
+
+  GroupCipher.prototype.encrypt = async function (
+    this: GroupCipher,
+    paddedPlaintext: Uint8Array,
+  ) {
+    const self = this as unknown as GroupCipherInternals;
+    const record = await self.senderKeyStore.loadSenderKey(self.senderKeyId);
+    const senderKeyState = record.getSenderKeyState() as SenderKeyStateLike;
+    const iteration = senderKeyState.senderChainKey.iteration;
+    const senderKey = self.getSenderKey(senderKeyState, iteration);
+    const ciphertext = packedBytes(
+      signalCrypto.encrypt(
+        senderKey.cipherKey,
+        paddedPlaintext,
+        senderKey.iv,
+      ) as Uint8Array,
+    );
+    const signingKeyPrivate = senderKeyState.signingKey.private;
+    if (!signingKeyPrivate) throw new Error("Missing signing key");
+    const msg = await SenderKeyMessage.create(
+      senderKeyState.keyId,
+      senderKey.iteration,
+      ciphertext,
+      packedBytes(signingKeyPrivate),
+    );
+    await self.senderKeyStore.storeSenderKey(self.senderKeyId, record);
+    return packedBytes(msg.serialize());
+  };
+
+  GroupCipher.prototype.decrypt = async function (
+    this: GroupCipher,
+    senderKeyMessageBytes: Uint8Array,
+  ) {
+    const self = this as unknown as GroupCipherInternals;
+    const record = await self.senderKeyStore.loadSenderKey(self.senderKeyId);
+    if (record.isEmpty()) {
+      throw new Error("No sender key for: " + self.senderKeyId.toString());
     }
-    return cached;
-  }
-  if (iteration - chain.iteration > 2000) {
-    throw new Error("Over 2000 messages into the future!");
-  }
-  while (chain.iteration < iteration) {
-    state.addSenderMessageKey(chain.getSenderMessageKey());
-    chain = chain.getNext();
-  }
-  state.senderChainKey = chain.getNext();
-  return chain.getSenderMessageKey();
+    const msg = SenderKeyMessage.fromSerialized(senderKeyMessageBytes);
+    const senderKeyState = record.getSenderKeyStateById(
+      msg.keyId,
+    ) as SenderKeyStateLike;
+    const signingKeyPublic = senderKeyState.signingKey.public;
+    if (!signingKeyPublic) throw new Error("Missing signing key");
+    if (!(await msg.verifySignature(packedBytes(signingKeyPublic)))) {
+      throw new Error("Invalid signature");
+    }
+    const senderKey = self.getSenderKey(senderKeyState, msg.iteration);
+    const plaintext = signalCrypto.decrypt(
+      senderKey.cipherKey,
+      msg.ciphertext,
+      senderKey.iv,
+    );
+    await self.senderKeyStore.storeSenderKey(self.senderKeyId, record);
+    return packedBytes(plaintext as Uint8Array);
+  };
+}
+
+async function roomGroupSession(groupId: string, sender: string) {
+  patchGroupCipherRatchet();
+  const store = await getSignalStore();
+  const name = senderKeyName(groupId, sender);
+  const id = name.toString();
+  const hit = roomSessions.get(id);
+  if (hit) return { store, name, ...hit };
+  const session = {
+    cipher: new GroupCipher(store, name),
+    builder: new GroupSessionBuilder(store),
+  };
+  roomSessions.set(id, session);
+  return { store, name, ...session };
 }
 
 export function isSignalSenderKeyCiphertext(raw: string): boolean {
@@ -137,11 +205,9 @@ export async function createRoomSenderDistribution(
   if (!groupId || !who) return null;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return null;
-  const name = senderKeyName(groupId, who);
+  const { name, builder } = await roomGroupSession(groupId, who);
   return withSkLock(name.toString(), async () => {
     try {
-      const store = await getSignalStore();
-      const builder = new GroupSessionBuilder(store);
       const skdm = await builder.create(name);
       return bytesToB64(skdm.serialize());
     } catch {
@@ -159,11 +225,9 @@ export async function processRoomSenderDistribution(
   if (!groupId || !who || !distributionB64) return false;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return false;
-  const name = senderKeyName(groupId, who);
+  const { name, builder } = await roomGroupSession(groupId, who);
   return withSkLock(name.toString(), async () => {
     try {
-      const store = await getSignalStore();
-      const builder = new GroupSessionBuilder(store);
       const skdm = SenderKeyDistributionMessage.deserialize(
         b64ToBytes(distributionB64),
       );
@@ -185,40 +249,17 @@ export async function wrapRoomSenderKeyPayload(
   if (!groupId || !who || !text) return null;
   const ready = await ensureLocalSignalIdentity();
   if (!ready) return null;
-  const name = senderKeyName(groupId, who);
+  const { name, cipher, builder } = await roomGroupSession(groupId, who);
   return withSkLock(name.toString(), async () => {
     try {
-      const store = await getSignalStore();
-      const builder = new GroupSessionBuilder(store);
       const skdm = await builder.create(name);
-      const record = await store.loadSenderKey(name);
-      const state = record.getSenderKeyState() as SenderKeyStateLike;
-      const iteration = state.senderChainKey.iteration;
-      const senderKey = messageKeyFor(state, iteration);
-      const ciphertext = signalCrypto.encrypt(
-        senderKey.cipherKey,
-        new TextEncoder().encode(text),
-        senderKey.iv,
-      );
-      const signingKeyPrivate = state.signingKey.private;
-      if (!signingKeyPrivate) throw new Error("Missing signing key");
-      const packedCt =
-        ciphertext instanceof Uint8Array
-          ? ciphertext
-          : new Uint8Array(ciphertext);
-      const msg = await SenderKeyMessage.create(
-        state.keyId,
-        senderKey.iteration,
-        packedCt,
-        new Uint8Array(signingKeyPrivate),
-      );
-      await store.storeSenderKey(name, record);
+      const packed = await cipher.encrypt(new TextEncoder().encode(text));
       const envelope: SenderKeyEnvelope = {
         v: 2,
         proto: "signal-sk",
         groupId: canonGroupId(groupId),
         sender: who,
-        body: bytesToB64(msg.serialize()),
+        body: bytesToB64(packedBytes(packed)),
         skdm: bytesToB64(skdm.serialize()),
       };
       const raw = JSON.stringify(envelope);
@@ -246,34 +287,13 @@ export async function unwrapRoomSenderKeyPayload(
         await processRoomSenderDistribution(gid, from, parsed.skdm);
       }
     }
-    const store = await getSignalStore();
-    const packed = b64ToBytes(parsed.body);
     let text: string | null = null;
     for (const gid of ids) {
-      const name = senderKeyName(gid, from);
+      const { name, cipher } = await roomGroupSession(gid, from);
       text = await withSkLock(name.toString(), async () => {
         try {
-          const record = await store.loadSenderKey(name);
-          if (record.isEmpty()) return null;
-          const msg = SenderKeyMessage.fromSerialized(packed);
-          const state = record.getSenderKeyStateById(
-            msg.keyId,
-          ) as SenderKeyStateLike;
-          const signingKeyPublic = state.signingKey.public;
-          if (!signingKeyPublic) return null;
-          if (!(await msg.verifySignature(new Uint8Array(signingKeyPublic)))) {
-            return null;
-          }
-          const senderKey = messageKeyFor(state, msg.iteration);
-          const plain = signalCrypto.decrypt(
-            senderKey.cipherKey,
-            msg.ciphertext,
-            senderKey.iv,
-          );
-          await store.storeSenderKey(name, record);
-          return new TextDecoder().decode(
-            plain instanceof Uint8Array ? plain : new Uint8Array(plain),
-          );
+          const plain = await cipher.decrypt(b64ToBytes(parsed.body));
+          return new TextDecoder().decode(packedBytes(plain));
         } catch {
           return null;
         }

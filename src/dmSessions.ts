@@ -653,6 +653,13 @@ export function formatThreadTime(at: number): string {
   if (sameDay) {
     return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysAgo = Math.floor(
+    (startToday.getTime() - date.getTime()) / 86_400_000,
+  );
+  if (daysAgo >= 0 && daysAgo < 6) {
+    return date.toLocaleDateString([], { weekday: "short" });
+  }
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 

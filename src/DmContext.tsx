@@ -734,22 +734,19 @@ export function DmProvider({
       sendingIdsRef.current.add(localId);
       if (thread && threadIsRoom(thread)) {
         const members = roomRecipientHandles(thread, slug);
-        await shareRoomSenderKey(thread, members);
-        let ok = false;
-        for (const recipient of members) {
-          const queued = await queueRoomMessage({
-            sender: slug,
-            recipient,
-            sessionKey: thread.sessionKey,
-            body: text,
-            messageId: localId,
-            title: thread.displayName,
-          }).catch((): { ok: false; reason: "error" } => ({
-            ok: false,
-            reason: "error",
-          }));
-          if (queued.ok) ok = true;
-        }
+        await shareRoomSenderKey(thread, members).catch(() => undefined);
+        const queued = await queueRoomMessage({
+          sender: slug,
+          recipients: members,
+          sessionKey: thread.sessionKey,
+          body: text,
+          messageId: localId,
+          title: thread.displayName,
+        }).catch((): { ok: false; reason: "error" } => ({
+          ok: false,
+          reason: "error",
+        }));
+        const ok = queued.ok;
         sendingIdsRef.current.delete(localId);
         setThreads((rows) =>
           rows.map((row) =>
@@ -1082,13 +1079,17 @@ export function DmProvider({
     const roomPlain = new Map<string, string>();
     for (const item of incoming) {
       if (item.kind !== "room") continue;
-      const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
-      const opened = await unwrapRoomSenderKeyPayload(
-        key,
-        item.sender,
-        item.body,
-      );
-      if (opened) roomPlain.set(item.id, opened);
+      if (isSignalSenderKeyCiphertext(item.body)) {
+        const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
+        const opened = await unwrapRoomSenderKeyPayload(
+          key,
+          item.sender,
+          item.body,
+        );
+        if (opened) roomPlain.set(item.id, opened);
+        continue;
+      }
+      roomPlain.set(item.id, item.body);
     }
     setThreads((rows) => {
       let next = rows;
@@ -1184,28 +1185,36 @@ export function DmProvider({
         if (item.kind === "room") {
           const plain = roomPlain.get(item.id) ?? item.body;
           if (!plain || isSignalSenderKeyCiphertext(plain)) continue;
-          let innerBody = plain;
+          let innerBody = "";
           let innerId = item.messageId;
+          let roomKey = key;
           try {
             const parsed = JSON.parse(plain) as {
               body?: string;
               messageId?: string;
+              sessionKey?: string;
             };
-            if (typeof parsed.body === "string") innerBody = parsed.body;
+            if (typeof parsed.body !== "string" || !parsed.body) continue;
+            innerBody = parsed.body;
             if (typeof parsed.messageId === "string") innerId = parsed.messageId;
+            if (typeof parsed.sessionKey === "string" && parsed.sessionKey) {
+              roomKey =
+                normalizeSessionKey(parsed.sessionKey) ?? parsed.sessionKey;
+            }
           } catch {
-            innerBody = plain;
+            continue;
           }
           const sameKey = (row: DmThread) =>
-            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key ||
-            row.id === key;
+            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) ===
+              roomKey ||
+            row.id === roomKey;
           let found = next.find(sameKey);
           if (!found) {
             found = addMembersToChat(
               {
                 ...createRoomThread(slug, next, item.title?.trim() || "Room"),
-                id: key,
-                sessionKey: key,
+                id: roomKey,
+                sessionKey: roomKey,
               },
               [sender],
               slug,
@@ -1410,22 +1419,16 @@ export function DmProvider({
             if (inflight.has(msg.id)) continue;
             inflight.add(msg.id);
             try {
-              let ok = false;
-              let queuedId: string | undefined;
-              for (const recipient of recipients) {
-                const queued = await queueRoomMessage({
-                  sender: slug,
-                  recipient,
-                  sessionKey: thread.sessionKey,
-                  body: msg.body,
-                  messageId: msg.id,
-                  title: thread.displayName,
-                });
-                if (queued.ok) {
-                  ok = true;
-                  queuedId = queued.id;
-                }
-              }
+              const queued = await queueRoomMessage({
+                sender: slug,
+                recipients,
+                sessionKey: thread.sessionKey,
+                body: msg.body,
+                messageId: msg.id,
+                title: thread.displayName,
+              });
+              const ok = queued.ok;
+              const queuedId = queued.ok ? queued.id : undefined;
               if (cancelled || !ok) {
                 inflight.delete(msg.id);
                 continue;

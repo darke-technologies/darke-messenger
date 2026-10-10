@@ -102,7 +102,11 @@ export function resolveChatPreview(
 
   const self = normId(currentUserId);
   const members = chatTitleMembers(thread, currentUserId);
-  if (threadIsGroup(thread) || members.length > 2) return snip;
+  if (threadIsGroup(thread) || members.length > 2) {
+    const peer = members.find((row) => row.id !== self);
+    const sender = peer ? peer.display_name || peer.username : "";
+    return sender ? `${sender}: ${snip}` : snip;
+  }
 
   const peer = members.find((row) => row.id !== self);
   const sender = peer ? peer.display_name || peer.username : "";

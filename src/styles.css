@@ -20100,23 +20100,42 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 0;
-  padding: 4px 8px 10px;
+  padding: 4px 4px 10px;
 }
 
 .dm-nav-stream-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin: 0;
-  padding: 8px 16px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: #a1a1aa;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   cursor: pointer;
   transform: none !important;
   outline: none !important;
   border-bottom: 2px solid transparent;
+}
+
+.dm-nav-stream-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 0;
+  background: #fff;
+  color: #09090b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dm-nav-stream-btn.is-on {
@@ -22305,10 +22324,10 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   align-items: center;
   flex: 0 0 auto;
   gap: 2px;
-  min-height: 52px;
-  padding: 8px 6px 8px 8px;
+  min-height: 72px;
+  padding: 10px 6px 10px 10px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -22330,7 +22349,7 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   padding: 2px 4px 2px 0;
   border: 0;
@@ -22343,26 +22362,28 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
 }
 
 .dm-nav-avatar {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   object-fit: cover;
   background: #27272a;
+  flex-shrink: 0;
 }
 
 .dm-nav-avatar.is-initial {
   display: grid;
   place-items: center;
   color: #f4f4f5;
-  font-size: 11px;
+  font-size: 18px;
   font-weight: 700;
 }
 
 .dm-nav-preview {
   display: block;
-  margin-top: 2px;
-  color: #71717a;
-  font-size: 12px;
+  min-width: 0;
+  margin-top: 0;
+  color: #a1a1aa;
+  font-size: 13px;
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -22445,7 +22466,7 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   padding: 2px 4px 2px 0;
   border: 0;
@@ -22459,31 +22480,32 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
 
 .dm-nav-face {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 
 .dm-nav-avatar {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   object-fit: cover;
   background: #141414;
+  flex-shrink: 0;
 }
 
 .dm-nav-avatar.is-initial {
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
 }
 
 .dm-nav-avatar.is-group-mesh {
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 50%;
   background: #1c1c1e;
   color: #f4f4f5;
   border: 0;
@@ -22659,14 +22681,38 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
   max-width: 100%;
 }
 
+.dm-nav-who-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dm-nav-who-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dm-nav-time {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
 .dm-nav-who strong {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
   max-width: 100%;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 650;
   color: #ffffff;
   white-space: nowrap;
@@ -22694,13 +22740,13 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
 
 .dm-nav-unread {
   margin-left: auto;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: #fff;
-  color: #09090b;
-  font-size: 10px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
   display: inline-flex;
@@ -22720,7 +22766,7 @@ html[data-theme="hud"] .newsfeed-inline-edit textarea:focus {
 
 .dm-nav-handle {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: #71717a;
   overflow: hidden;

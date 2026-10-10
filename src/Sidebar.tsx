@@ -17,7 +17,11 @@ import {
 } from "./useSidebarStore";
 import { NewChatPanel } from "./NewChatPanel";
 import { IconPin } from "./icons";
-import { focusChatMessage, openConversationSettings } from "./dmSessions";
+import {
+  focusChatMessage,
+  formatThreadTime,
+  openConversationSettings,
+} from "./dmSessions";
 import { AppHeader } from "./SidebarHeader";
 import { SidebarChatItem } from "./SidebarChatItem";
 import type { DmThread } from "./dmSessions";
@@ -100,8 +104,20 @@ export function ChatSidebar({
     return true;
   });
 
+  const me = slug.replace(/^@/, "").trim().toLowerCase();
+  const dmUnread = recent
+    .filter((thread) => !threadIsGroup(thread))
+    .reduce((sum, thread) => sum + sidebarUnreadCount(thread), 0);
+  const roomUnread = recent
+    .filter((thread) => threadIsRoom(thread))
+    .reduce((sum, thread) => sum + sidebarUnreadCount(thread), 0);
+
   function renderChatRow(thread: DmThread) {
     const label = sidebarRowLabel(thread, slug, localChat.peek(thread.id));
+    const peerHandle =
+      sidebarAvatarNames(thread, slug)[0] ||
+      listChatMemberHandles(thread, slug).find((h) => h !== me) ||
+      "";
     return (
       <SidebarChatItem
         key={thread.id}
@@ -112,23 +128,13 @@ export function ChatSidebar({
         peerAvatarUrl={
           threadIsGroup(thread)
             ? null
-            : people.person(sidebarAvatarNames(thread, slug)[0] || "")
-                ?.avatarUrl ?? null
+            : people.person(peerHandle)?.avatarUrl ?? null
         }
         active={thread.id === activeId}
         pinned={Boolean(thread.pinned)}
         badge={sidebarThreadBadge(thread)}
-        handle={
-          threadIsGroup(thread)
-            ? undefined
-            : handleBadge(
-                sidebarAvatarNames(thread, slug)[0] ||
-                  listChatMemberHandles(thread, slug).find(
-                    (h) => h !== slug.replace(/^@/, "").trim().toLowerCase(),
-                  ) ||
-                  "",
-              )
-        }
+        handle={handleBadge(peerHandle)}
+        at={formatThreadTime(threadLastActivityAt(thread))}
         menuOpen={menu?.chatId === thread.id}
         unread={sidebarUnreadCount(thread)}
         onOpen={() => openChat(thread.id)}
@@ -173,11 +179,11 @@ export function ChatSidebar({
         <div className="dm-nav-stream" role="tablist" aria-label="Chat lists">
           {(
             [
-              ["all", "ALL"],
-              ["messages", "MESSAGES"],
-              ["rooms", "ROOMS"],
+              ["all", "ALL", 0],
+              ["messages", "1:1 CHATS", dmUnread],
+              ["rooms", "ROOMS", roomUnread],
             ] as const
-          ).map(([id, label]) => (
+          ).map(([id, label, unread]) => (
             <button
               key={id}
               type="button"
@@ -186,7 +192,12 @@ export function ChatSidebar({
               className={`dm-nav-stream-btn${lane === id ? " is-on" : ""}`}
               onClick={() => setLane(id)}
             >
-              {label}
+              <span>{label}</span>
+              {unread > 0 ? (
+                <span className="dm-nav-stream-count" aria-label={`${unread} unread`}>
+                  {unread}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -200,7 +211,7 @@ export function ChatSidebar({
               {lane === "rooms"
                 ? "No rooms yet."
                 : lane === "messages"
-                  ? "No chats yet."
+                  ? "No 1:1 chats yet."
                   : "No conversations yet."}
             </p>
           ) : (
@@ -249,7 +260,7 @@ export function ChatSidebar({
             }}
           >
             <span aria-hidden>⚙</span>
-            Chat settings
+            {threadIsRoom(menuThread) ? "Room settings" : "Chat settings"}
           </button>
           <button
             type="button"
