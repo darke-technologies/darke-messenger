@@ -1059,7 +1059,9 @@ export function DmProvider({
             ),
           ].filter(Boolean);
           const found = next.find(
-            (row) => row.sessionKey === key || row.id === key,
+            (row) =>
+              (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key ||
+              row.id === key,
           );
           if (found) {
             next = next.map((row) =>
@@ -1115,10 +1117,22 @@ export function DmProvider({
           } catch {
             innerBody = plain;
           }
-          const found =
-            next.find((row) => row.sessionKey === key) ??
-            next.find((row) => row.id === key);
-          if (!found) continue;
+          const sameKey = (row: DmThread) =>
+            (normalizeSessionKey(row.sessionKey) ?? row.sessionKey) === key ||
+            row.id === key;
+          let found = next.find(sameKey);
+          if (!found) {
+            found = addMembersToChat(
+              {
+                ...createRoomThread(slug, next, item.title?.trim() || "Room"),
+                id: key,
+                sessionKey: key,
+              },
+              [sender],
+              slug,
+            );
+            next = [found, ...next];
+          }
           if (
             found.messages.some(
               (msg) =>

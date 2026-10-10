@@ -82,7 +82,12 @@ export function parseMailboxPlain(raw: string): MailboxPlain | null {
       v: 2,
       sessionKey: parsed.sessionKey,
       kind: parsed.kind,
-      body: parsed.body,
+      body:
+        typeof parsed.body === "string"
+          ? parsed.body
+          : parsed.body && typeof parsed.body === "object"
+            ? JSON.stringify(parsed.body)
+            : undefined,
       fileName: parsed.fileName,
       mime: parsed.mime,
       messageId:

@@ -324,7 +324,7 @@ export function ChatView() {
       })();
     }
     void sendChat(text, {
-      mailbox: !p2pLive,
+      mailbox: threadIsRoom(active) || !p2pLive,
       replyToMessageId: replyId,
     });
     stopTyping();
@@ -339,7 +339,7 @@ export function ChatView() {
 
   function attachFile(file: File | undefined) {
     if (!file || !active) return;
-    void sendChat("", { mailbox: !p2pLive, file });
+    void sendChat("", { mailbox: threadIsRoom(active) || !p2pLive, file });
   }
 
   const youFp = nodeFingerprint(`${active?.sessionKey ?? ""}:you:${slug}`);
