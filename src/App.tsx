@@ -27,7 +27,7 @@ import {
 } from "./authCallback";
 import { resetWelcomePrefsCache, hydrateThemeFromVault } from "./welcomePrefs";
 import { initTheme } from "./theme";
-import { captureJoinIntent } from "./dmSessions";
+import { captureJoinIntent, captureRoomJoinIntent } from "./dmSessions";
 import { GuestMessenger } from "./GuestMessenger";
 import { UpgradeModal } from "./UpgradeModal";
 import { OPEN_PRICING_EVENT } from "./useUpgradeModalStore";
@@ -149,6 +149,8 @@ function AppBody({ initialPath }: { initialPath: string }) {
   }
 
   function enterApp(slug: string, _dest: "home" | "chat" = "chat") {
+    captureRoomJoinIntent();
+    captureJoinIntent();
     resetSessionCaches();
     void hydrateThemeFromVault().catch(() => null);
     go("/app", { kind: "app", slug });
@@ -157,6 +159,7 @@ function AppBody({ initialPath }: { initialPath: string }) {
   useEffect(() => {
     initTheme();
     captureJoinIntent();
+    captureRoomJoinIntent();
   }, []);
 
   useEffect(() => {
@@ -388,6 +391,7 @@ function AppBody({ initialPath }: { initialPath: string }) {
           if (typeof window !== "undefined") {
             const path = window.location.pathname;
             captureJoinIntent();
+            captureRoomJoinIntent();
             if (isTeamHandlePath(path) || path.startsWith("/teams")) {
               window.history.replaceState(
                 null,

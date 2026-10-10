@@ -27,6 +27,7 @@ import {
   CHAT_FOCUS_EVENT,
   generateSessionKey,
   pinUntilFromDuration,
+  roomShareLink,
   sessionShareLink,
   threadPinIsLive,
   type ChatFocusDetail,
@@ -795,7 +796,11 @@ export function ChatView() {
       ) : null}
       {inviteOpen && canInvite && active ? (
         <InviteModal
-          shareLink={sessionShareLink(active.sessionKey)}
+          shareLink={
+            threadIsRoom(active)
+              ? roomShareLink(active.sessionKey, active.createdBy || slug)
+              : sessionShareLink(active.sessionKey)
+          }
           copied={copied}
           onCopy={() => void copyChatLink()}
           onClose={() => setInviteOpen(false)}

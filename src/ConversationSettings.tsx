@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { threadIsGroup } from "./chatController";
+import { threadIsGroup, threadIsRoom } from "./chatController";
 import {
   chatMemberCount,
   isChatOwner,
@@ -13,7 +13,7 @@ import { useLocalChat } from "./useLocalChat";
 import { displayNameFor, handleBadge, usePersonDirectory } from "./personDirectory";
 import { UserAvatar } from "./UserAvatar";
 import type { DmThread } from "./dmSessions";
-import { sessionShareLink } from "./dmSessions";
+import { roomShareLink, sessionShareLink } from "./dmSessions";
 import { focusChatMessage } from "./dmSessions";
 
 const COLORS = [
@@ -55,6 +55,7 @@ export function ConversationSettings({
   };
   const local = useLocalChat(slug);
   const group = threadIsGroup(thread);
+  const room = threadIsRoom(thread);
   const [note, setNote] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -72,7 +73,9 @@ export function ConversationSettings({
   const peerPerson = people.person(peer);
   const youFp = nodeFingerprint(`${thread.sessionKey}:you:${slug}`);
   const peerFp = nodeFingerprint(`${thread.sessionKey}:peer:${peer || "peer"}`);
-  const shareLink = sessionShareLink(thread.sessionKey);
+  const shareLink = room
+    ? roomShareLink(thread.sessionKey, thread.createdBy || slug)
+    : sessionShareLink(thread.sessionKey);
   const searchHits = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -95,7 +98,9 @@ export function ConversationSettings({
         <button type="button" className="convo-settings-back" onClick={onBack}>
           ‹
         </button>
-        <h1>{group ? "Group settings" : "Chat settings"}</h1>
+        <h1>
+          {room ? "Room settings" : group ? "Group settings" : "Chat settings"}
+        </h1>
       </header>
 
       <div className="convo-settings-scroll">
@@ -311,11 +316,24 @@ export function ConversationSettings({
               >
                 <span>
                   <IconLink className="convo-settings-row-icon" />
-                  <strong>{group ? "Group link" : "Chat invite link"}</strong>
+                  <strong>
+                    {room
+                      ? "Room invite link"
+                      : group
+                        ? "Group link"
+                        : "Chat invite link"}
+                  </strong>
                 </span>
                 <span className="convo-settings-value">{copied ? "Copied" : "Copy"}</span>
               </button>
               <p className="convo-settings-link">{shareLink}</p>
+              {room ? (
+                <p className="muted apps-submit-note">
+                  This link identifies the room and host. Sender Keys stay on
+                  device and are delivered over Signal after you admit the
+                  joiner.
+                </p>
+              ) : (
               <button
                 type="button"
                 className="convo-settings-row"
@@ -326,9 +344,11 @@ export function ConversationSettings({
               >
                 <span>
                   <strong>Rotate keys</strong>
-                  <em>Issues a new join link for this room.</em>
+                  <em>Issues a new join link for this chat.</em>
                 </span>
               </button>
+              )}
+              {room ? null : (
               <button
                 type="button"
                 className="convo-settings-row"
@@ -341,6 +361,7 @@ export function ConversationSettings({
                   <strong>Revoke share link</strong>
                 </span>
               </button>
+              )}
             </>
           ) : null}
           {!group ? (

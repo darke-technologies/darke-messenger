@@ -223,8 +223,87 @@ export function sessionShareLink(sessionKey: string): string {
   return `${JOIN_ORIGIN}/join#${sessionKey}`;
 }
 
+export type RoomInvite = { sessionKey: string; host: string };
+
+const ROOM_JOIN_STORAGE = "darke.room.join";
+
+function joinOrigin(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return JOIN_ORIGIN;
+}
+
+/** Signal room invite. Does not embed Sender Keys — host admits via pairwise SKDM. */
+export function roomShareLink(sessionKey: string, host: string): string {
+  const key = normalizeSessionKey(sessionKey) ?? sessionKey.trim();
+  const owner = host.replace(/^@/, "").trim().toLowerCase();
+  return `${joinOrigin()}/app#darke-room=${encodeURIComponent(key)}&host=${encodeURIComponent(owner)}`;
+}
+
+export function parseRoomInvite(raw = ""): RoomInvite | null {
+  if (!raw) return null;
+  try {
+    const url = raw.includes("://")
+      ? new URL(raw)
+      : typeof window !== "undefined"
+        ? new URL(raw, window.location.origin)
+        : null;
+    const blob = url
+      ? `${url.hash.replace(/^#/, "")}&${url.search.replace(/^\?/, "")}`
+      : raw.replace(/^#/, "");
+    const params = new URLSearchParams(blob.replace(/#/g, "&"));
+    const room = params.get("darke-room") || params.get("room");
+    const host = (params.get("host") || "").replace(/^@/, "").trim().toLowerCase();
+    const sessionKey = normalizeSessionKey(room ?? "");
+    if (!sessionKey || !host) return null;
+    return { sessionKey, host };
+  } catch {
+    return null;
+  }
+}
+
+export function readRoomInviteFromLocation(): RoomInvite | null {
+  if (typeof window === "undefined") return null;
+  const fromUrl = parseRoomInvite(window.location.href);
+  if (fromUrl) return fromUrl;
+  try {
+    return parseRoomInvite(sessionStorage.getItem(ROOM_JOIN_STORAGE) ?? "");
+  } catch {
+    return null;
+  }
+}
+
+export function rememberRoomInvite(invite: RoomInvite | null): void {
+  try {
+    if (invite) {
+      sessionStorage.setItem(
+        ROOM_JOIN_STORAGE,
+        `darke-room=${invite.sessionKey}&host=${invite.host}`,
+      );
+    } else {
+      sessionStorage.removeItem(ROOM_JOIN_STORAGE);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function captureRoomJoinIntent(): RoomInvite | null {
+  const invite = readRoomInviteFromLocation();
+  if (invite) rememberRoomInvite(invite);
+  return invite;
+}
+
+export function consumeRoomJoinIntent(): RoomInvite | null {
+  const invite = captureRoomJoinIntent();
+  if (invite) rememberRoomInvite(null);
+  return invite;
+}
+
 export function readJoinKeyFromLocation(): string | null {
   if (typeof window === "undefined") return null;
+  if (parseRoomInvite(window.location.href)) return null;
   const fromHash = normalizeSessionKey(window.location.hash);
   if (fromHash) return fromHash;
   const fromPath = normalizeSessionKey(window.location.href);
@@ -350,10 +429,11 @@ export function clearPendingLaunch(): void {
 export const COPY_LINK_TOAST_KEY = "darke.copy.link.toast";
 export const COPY_LINK_TOAST_EVENT = "darke-copy-link-toast";
 
-export type CopyLinkKind = "chat" | "group" | "team" | "invite";
+export type CopyLinkKind = "chat" | "group" | "team" | "invite" | "room";
 
 export function copyLinkToastLabel(kind: CopyLinkKind): string {
   if (kind === "invite") return "Link copied to clipboard!";
+  if (kind === "room") return "Room invite copied to clipboard";
   if (kind === "group") return "Group link copied to clipboard";
   if (kind === "team") return "Team link copied to clipboard";
   return "Chat link copied to clipboard!";
@@ -372,7 +452,15 @@ export function consumeChatLinkCopiedToast(): CopyLinkKind | null {
     const raw = sessionStorage.getItem(COPY_LINK_TOAST_KEY);
     if (!raw) return null;
     sessionStorage.removeItem(COPY_LINK_TOAST_KEY);
-    if (raw === "group" || raw === "team" || raw === "chat") return raw;
+    if (
+      raw === "group" ||
+      raw === "team" ||
+      raw === "chat" ||
+      raw === "room" ||
+      raw === "invite"
+    ) {
+      return raw;
+    }
     return "chat";
   } catch {
     return null;

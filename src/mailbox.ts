@@ -26,7 +26,8 @@ export type MailboxKind =
   | "delete"
   | "pin"
   | "skdm"
-  | "room";
+  | "room"
+  | "room-join";
 
 export type MailboxPlain = {
   v: 2;
@@ -70,7 +71,8 @@ export function parseMailboxPlain(raw: string): MailboxPlain | null {
       parsed.kind !== "delete" &&
       parsed.kind !== "pin" &&
       parsed.kind !== "skdm" &&
-      parsed.kind !== "room"
+      parsed.kind !== "room" &&
+      parsed.kind !== "room-join"
     ) {
       return null;
     }
@@ -258,6 +260,29 @@ export async function queueRoomSenderKey(opts: {
     recipient: opts.recipient,
     ciphertext: packed.envelope,
     secrets: [opts.distribution],
+  });
+}
+
+export async function queueRoomJoinRequest(opts: {
+  sender: string;
+  recipient: string;
+  sessionKey: string;
+}): Promise<MailboxEnqueue> {
+  const packed = await wrapMailboxInner(
+    opts.recipient,
+    {
+      v: 2,
+      sessionKey: opts.sessionKey,
+      kind: "room-join",
+    },
+    [],
+  );
+  if (!packed.ok || !packed.envelope) return packed;
+  return insertCiphertextOnly({
+    sender: opts.sender,
+    recipient: opts.recipient,
+    ciphertext: packed.envelope,
+    secrets: [],
   });
 }
 

@@ -47,6 +47,45 @@ export function createRoomThread(
   };
 }
 
+export function adoptRoomThread(
+  slug: string,
+  existing: DmThread[],
+  sessionKey: string,
+  host: string,
+  name?: string,
+): DmThread {
+  const owner = host.replace(/^@/, "").trim().toLowerCase();
+  const title = name?.trim() || "Room";
+  return {
+    ...newThread(
+      sessionKey,
+      true,
+      "room",
+      owner,
+      nextChatSeq(slug, existing),
+    ),
+    createdBy: owner,
+    isGroup: true,
+    displayName: title,
+    autoNamed: !name?.trim(),
+    renamed: Boolean(name?.trim()),
+    handle: "room",
+    description: "",
+    skSharedWith: [],
+    messages: [
+      {
+        id: `${sessionKey}-join-wait`,
+        direction: "received",
+        body: `Waiting for @${owner} to admit you with Signal room keys.`,
+        at: Date.now(),
+        e2ee: true,
+        kind: "system",
+        is_system: true,
+      },
+    ],
+  };
+}
+
 function normHandle(raw: string, self?: string): string {
   const handle = raw.replace(/^@/, "").trim().toLowerCase();
   if (!handle || handle === "__self__") return "";

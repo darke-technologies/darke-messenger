@@ -214,7 +214,6 @@ export function ChatSidebar({
 
       <div className="dm-nav-scroll">
       <div className="dm-nav-section dm-nav-section-chats">
-        <span className="nav-cat dm-nav-label">RECENTS</span>
         <div className="dm-nav-list">
           {visibleRecent.length === 0 ? (
             <p className="muted msg-nav-empty">

@@ -10,6 +10,8 @@ import {
 } from "react";
 import {
   captureJoinIntent,
+  consumeRoomJoinIntent,
+  roomShareLink,
   chatIdFromLocation,
   chatRoomPath,
   CHAT_FOCUS_EVENT,
@@ -47,6 +49,7 @@ import {
   queueMailboxControl,
   queueMailboxFile,
   queueMailboxMessage,
+  queueRoomJoinRequest,
   queueRoomMessage,
   queueRoomSenderKey,
 } from "./mailbox";
@@ -57,6 +60,7 @@ import {
 } from "./lib/crypto/signalRooms";
 import {
   addMembersToChat,
+  adoptRoomThread,
   createDirectChat,
   createRoomThread,
   threadIsGroup,
@@ -304,6 +308,44 @@ export function DmProvider({
     };
   }, [slug, guest]);
 
+  useEffect(() => {
+    if (guest) return;
+    const invite = consumeRoomJoinIntent();
+    if (!invite) return;
+    const host = invite.host.replace(/^@/, "").trim().toLowerCase();
+    const key = invite.sessionKey;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", "/app");
+    }
+    setThreads((rows) => {
+      const found =
+        rows.find((row) => row.sessionKey === key && threadIsRoom(row)) ??
+        rows.find((row) => row.sessionKey === key);
+      if (found) {
+        const next = threadIsRoom(found)
+          ? found
+          : { ...found, roomKind: "room" as const, isGroup: true, handle: "room" };
+        setActiveId(found.id);
+        setDraft({
+          sessionKey: key,
+          shareLink: roomShareLink(key, found.createdBy || host),
+        });
+        return rows.map((row) => (row.id === found.id ? next : row));
+      }
+      const thread = adoptRoomThread(slug, rows, key, host);
+      setActiveId(thread.id);
+      setDraft({ sessionKey: key, shareLink: roomShareLink(key, host) });
+      return [thread, ...rows];
+    });
+    if (host && host !== slug) {
+      void queueRoomJoinRequest({
+        sender: slug,
+        recipient: host,
+        sessionKey: key,
+      });
+    }
+  }, [guest, slug]);
+
   const generateChatLink = useCallback(() => {
     setDraft(makeDraft());
     setCopied(false);
@@ -412,7 +454,7 @@ export function DmProvider({
         setActiveId(thread.id);
         setDraft({
           sessionKey: thread.sessionKey,
-          shareLink: sessionShareLink(thread.sessionKey),
+          shareLink: roomShareLink(thread.sessionKey, slug),
         });
         setRoomReady(false);
         setCopied(false);
@@ -532,7 +574,9 @@ export function DmProvider({
     writeLastActiveChatId(slug, row.id);
     setDraft({
       sessionKey: row.sessionKey,
-      shareLink: sessionShareLink(row.sessionKey),
+      shareLink: threadIsRoom(row)
+        ? roomShareLink(row.sessionKey, row.createdBy || slug)
+        : sessionShareLink(row.sessionKey),
     });
     syncChatUrl(row);
   }, [guest, slug, activeId]);
@@ -545,14 +589,18 @@ export function DmProvider({
   const copyChatLink = useCallback(async () => {
     const row = threadsRef.current.find((item) => item.id === activeId);
     if (!isChatOwner(row ?? null, slug)) return;
-    const link =
-      draft?.shareLink ??
-      (row ? sessionShareLink(row.sessionKey) : null);
+    const link = row
+      ? threadIsRoom(row)
+        ? roomShareLink(row.sessionKey, row.createdBy || slug)
+        : sessionShareLink(row.sessionKey)
+      : draft?.shareLink;
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      showCopyLinkToast(threadIsGroup(row) ? "group" : "chat");
+      showCopyLinkToast(
+        threadIsRoom(row) ? "room" : threadIsGroup(row) ? "group" : "chat",
+      );
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
       setCopied(false);
@@ -992,6 +1040,16 @@ export function DmProvider({
       for (const item of incoming) {
         const key = normalizeSessionKey(item.sessionKey) ?? item.sessionKey;
         const sender = item.sender.replace(/^@/, "").trim().toLowerCase();
+        if (item.kind === "room-join") {
+          const found = next.find(
+            (row) => threadIsRoom(row) && row.sessionKey === key,
+          );
+          if (!found || !isChatOwner(found, slug)) continue;
+          const admitted = addMembersToChat(found, [sender], slug);
+          next = next.map((row) => (row.id === found.id ? admitted : row));
+          void shareRoomSenderKey(admitted, [sender]);
+          continue;
+        }
         if (item.kind === "skdm") {
           const members = [
             ...new Set(
